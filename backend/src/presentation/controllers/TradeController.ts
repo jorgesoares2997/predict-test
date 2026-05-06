@@ -24,6 +24,7 @@ export class TradeController {
       return reply.status(400).send({ error: 'Missing required trade parameters' });
     }
     const prepared = await this.tradeUseCase.prepareTrade({
+      userId: user.sub,
       userPublicKey: user.wallet_address,
       marketId,
       outcomeId,
@@ -34,19 +35,21 @@ export class TradeController {
 
   executeTrade = async (request: FastifyRequest, reply: FastifyReply) => {
     const user = (request as any).user;
-    const { signedXDR, marketId, outcomeId, amount } = request.body as {
+    const { signedXDR, transactionId, marketId, outcomeId, amount } = request.body as {
       signedXDR: string;
+      transactionId: string;
       marketId: string;
       outcomeId: string;
       amount: string;
     };
-    if (!signedXDR || !marketId || !outcomeId || !amount) {
+    if (!signedXDR || !transactionId || !marketId || !outcomeId || !amount) {
       return reply.status(400).send({ error: 'Missing required execution parameters' });
     }
     const result = await this.tradeUseCase.executeTrade({
       userId: user.sub,
       userKycStatus: user.kyc_status,
       signedXdr: signedXDR,
+      transactionId,
       marketId,
       outcomeId,
       amount,

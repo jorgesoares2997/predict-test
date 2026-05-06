@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useUiStore } from '@/store/useUiStore';
-import { useKYC } from '@/hooks/useKYC';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -21,14 +20,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Wallet, Shield, LogOut } from 'lucide-react';
+import { Wallet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 export function Navbar() {
   const { connect, isLoading, logout } = useAuth();
   const { user, publicKey, token, isAuthenticated } = useAuthStore();
   const { isLogoutModalOpen, setLogoutModalOpen } = useUiStore();
-  const { status: kycStatus, startVerification } = useKYC();
+  const kycStatus = user?.kycStatus ?? 'pending';
 
   const truncateKey = (key: string) => `${key.slice(0, 4)}...${key.slice(-4)}`;
 
@@ -73,17 +72,11 @@ export function Navbar() {
         <div className="flex items-center gap-4">
           {isAuthenticated && publicKey && token ? (
             <>
-              {kycStatus !== 'verified' && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="hidden md:flex border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
-                  onClick={startVerification}
-                >
-                  <Shield className="h-4 w-4 mr-2" />
-                  Verify Identity
+              <Link href="/profile">
+                <Button variant="outline" size="sm" className="hidden md:flex">
+                  Profile
                 </Button>
-              )}
+              </Link>
 
               <Button
                 variant="secondary"

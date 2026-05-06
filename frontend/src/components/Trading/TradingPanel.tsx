@@ -1,20 +1,37 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Market, Outcome } from '@/types';
+import { Market, TransactionRecord } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useExecuteTrade } from '@/hooks/useExecuteTrade';
 import { useAuthStore } from '@/store/useAuthStore';
-import { Wallet } from 'lucide-react';
+import { Wallet, Copy, ExternalLink } from 'lucide-react';
 import { toast } from '@/lib/toast';
+import apiClient from '@/services/apiClient';
+import { useQuery } from '@tanstack/react-query';
 
 export function TradingPanel({ market }: { market: Market }) {
   const [amount, setAmount] = useState<string>('');
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const { executeTrade, isProcessing } = useExecuteTrade();
   const { user } = useAuthStore();
+  const { data: userTransactions } = useQuery<TransactionRecord[]>({
+    queryKey: ['user-market-transactions', user?.id, market.id],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/transactions', {
+        params: {
+          user_id: user?.id,
+          market_id: market.id,
+        },
+      });
+      return data;
+    },
+    enabled: Boolean(user?.id),
+  });
+  const existingPrediction = userTransactions?.find((tx) => !tx.tx_hash.startsWith('pending:'));
+  const selectedPredictionName = market.outcomes.find((o) => o.id === existingPrediction?.result_id)?.name ?? existingPrediction?.result_id;
 
   const handleTrade = async () => {
     if (!selectedOutcome) {
@@ -26,11 +43,16 @@ export function TradingPanel({ market }: { market: Market }) {
       return;
     }
 
-    await executeTrade({
+    const result = await executeTrade({
       marketId: market.id,
       outcomeId: selectedOutcome,
       amount,
     });
+
+    if (result) {
+      setAmount('');
+      setSelectedOutcome(null);
+    }
   };
 
   if (!user) {
@@ -46,7 +68,8 @@ export function TradingPanel({ market }: { market: Market }) {
   }
 
   return (
-    <Card className="sticky top-24">
+    <>
+      <Card className="sticky top-24">
       <CardHeader>
         <CardTitle>Trade</CardTitle>
       </CardHeader>
@@ -85,16 +108,57 @@ export function TradingPanel({ market }: { market: Market }) {
 
         <Button
           onClick={handleTrade}
-          disabled={isProcessing || !amount || !selectedOutcome}
+          disabled={Boolean(existingPrediction) || isProcessing || !amount || !selectedOutcome}
           className="w-full h-12 text-lg font-bold"
         >
-          {isProcessing ? 'Processing...' : 'Execute Trade'}
+          {existingPrediction ? 'Prediction already submitted' : isProcessing ? 'Processing...' : 'Execute Trade'}
         </Button>
 
         <p className="text-[10px] text-center text-muted-foreground">
           By clicking Execute Trade, you agree to the Terms of Service.
         </p>
       </CardContent>
-    </Card>
+      </Card>
+      {existingPrediction && (
+        <Card className="mt-4 border-primary/30 bg-card/90">
+        <CardHeader>
+          <CardTitle className="text-base">Your prediction for this market</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <div>
+            <p className="text-muted-foreground mb-1">Transaction hash</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="break-all line-clamp-2 font-mono text-xs">{existingPrediction.tx_hash}</p>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(existingPrediction.tx_hash);
+                    toast.success('Transaction hash copied');
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+                <a
+                  href={`https://stellar.expert/explorer/testnet/tx/${existingPrediction.tx_hash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Button type="button" size="icon" variant="ghost">
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </a>
+              </div>
+            </div>
+          </div>
+          <p><span className="text-muted-foreground">Amount:</span> {existingPrediction.amount} USDC</p>
+          <p><span className="text-muted-foreground">Prediction:</span> {selectedPredictionName}</p>
+          <p><span className="text-muted-foreground">Created at:</span> {new Date(existingPrediction.created_at).toLocaleString()}</p>
+        </CardContent>
+        </Card>
+      )}
+    </>
   );
 }

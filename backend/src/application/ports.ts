@@ -50,6 +50,7 @@ export interface ICategoryRepository {
 export interface ITransactionRepository {
   create(data: Omit<Transaction, 'id' | 'created_at'>): Promise<Transaction>;
   findById(id: string): Promise<Transaction | null>;
+  findByUserAndMarket(userId: string, marketId: string): Promise<Transaction | null>;
   findAll(filters?: { user_id?: string; market_id?: string; result_id?: string }): Promise<Transaction[]>;
   findByTxHash(txHash: string): Promise<Transaction | null>;
   update(

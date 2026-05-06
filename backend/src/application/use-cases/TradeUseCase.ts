@@ -2,6 +2,7 @@ import { IMarketRepository, IStellarService, ITransactionRepository } from '../p
 import { RegisterTradeDtoType } from '../dtos';
 import { DomainException, NotFoundException } from '../../domain/exceptions';
 import { KycStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
 export class TradeUseCase {
   private readonly kycEnabled = process.env.ENABLE_KYC === 'true';
@@ -76,6 +77,7 @@ export class TradeUseCase {
   }
 
   async prepareTrade(input: {
+    userId: string;
     userPublicKey: string;
     marketId: string;
     outcomeId: string;
@@ -92,6 +94,11 @@ export class TradeUseCase {
     const amountStroops = this.toStroops(input.amount);
     if (amountStroops <= 0n) {
       throw new DomainException('Amount must be greater than zero');
+    }
+
+    const existingPrediction = await this.transactionRepository.findByUserAndMarket(input.userId, input.marketId);
+    if (existingPrediction && !existingPrediction.tx_hash.startsWith('pending:')) {
+      throw new DomainException('You already placed a prediction in this market');
     }
 
     let xdr: string;
@@ -124,24 +131,68 @@ export class TradeUseCase {
       });
     }
 
-    return { xdr, outcomeIndex, amountStroops: amountStroops.toString() };
+    const reservedTransaction = existingPrediction
+      ? await this.transactionRepository.update(existingPrediction.id, {
+          tx_hash: `pending:${randomUUID()}`,
+          result_id: input.outcomeId,
+          amount: Number(input.amount) as any,
+        })
+      : await this.transactionRepository.create({
+          tx_hash: `pending:${randomUUID()}`,
+          user_id: input.userId,
+          market_id: input.marketId,
+          result_id: input.outcomeId,
+          amount: Number(input.amount) as any,
+        });
+
+    return {
+      xdr,
+      outcomeIndex,
+      amountStroops: amountStroops.toString(),
+      transactionId: reservedTransaction.id,
+    };
   }
 
   async executeTrade(input: {
     userId: string;
     userKycStatus: string;
     signedXdr: string;
+    transactionId: string;
     marketId: string;
     outcomeId: string;
     amount: string;
   }) {
+    const reserved = await this.transactionRepository.findById(input.transactionId);
+    if (!reserved || reserved.user_id !== input.userId || reserved.market_id !== input.marketId) {
+      throw new DomainException('Reserved transaction not found');
+    }
+
     const txHash = await this.stellarService.submitSignedContractTransaction(input.signedXdr);
-    const tx = await this.registerTrade(input.userId, input.userKycStatus, {
+
+    if (this.kycEnabled && input.userKycStatus !== KycStatus.VERIFIED) {
+      throw new DomainException('Only KYC verified users can trade.');
+    }
+
+    const market = await this.marketRepository.findById(input.marketId);
+    if (!market) {
+      throw new NotFoundException('Market not found');
+    }
+    const resultExists = market.results.some((r) => r.id === input.outcomeId);
+    if (!resultExists) {
+      throw new DomainException('Result ID does not belong to this market');
+    }
+
+    const existingTxByHash = await this.transactionRepository.findByTxHash(txHash);
+    if (existingTxByHash && existingTxByHash.id !== reserved.id) {
+      throw new DomainException('Transaction already registered');
+    }
+
+    const tx = await this.transactionRepository.update(reserved.id, {
       tx_hash: txHash,
-      market_id: input.marketId,
       result_id: input.outcomeId,
-      amount: Number(input.amount),
+      amount: Number(input.amount) as any,
     });
+
     return { txHash, transaction: tx };
   }
 

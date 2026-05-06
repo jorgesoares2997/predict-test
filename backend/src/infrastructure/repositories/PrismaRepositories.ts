@@ -237,6 +237,13 @@ export class PrismaTransactionRepository implements ITransactionRepository {
     return this.prisma.transaction.findUnique({ where: { id } });
   }
 
+  async findByUserAndMarket(userId: string, marketId: string): Promise<Transaction | null> {
+    return this.prisma.transaction.findFirst({
+      where: { user_id: userId, market_id: marketId },
+      orderBy: { created_at: 'desc' },
+    });
+  }
+
   async findAll(filters?: { user_id?: string; market_id?: string; result_id?: string }): Promise<Transaction[]> {
     return this.prisma.transaction.findMany({
       where: {

@@ -5,6 +5,8 @@ export interface User {
   publicKey: string;
   kycStatus: KYCStatus;
   email?: string;
+  diditId?: string | null;
+  createdAt?: string;
 }
 
 export interface Market {
@@ -39,6 +41,16 @@ export interface Trade {
   price: string;
   txHash: string;
   createdAt: string;
+}
+
+export interface TransactionRecord {
+  id: string;
+  tx_hash: string;
+  user_id: string;
+  market_id: string;
+  result_id: string;
+  amount: string;
+  created_at: string;
 }
 
 export interface Category {

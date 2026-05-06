@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import apiClient from '@/services/apiClient';
 import { stellarService } from '@/services/stellarService';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -14,6 +15,7 @@ interface TradeParams {
 export const useExecuteTrade = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
 
   const executeTrade = async ({ marketId, outcomeId, amount }: TradeParams) => {
     if (!user) {
@@ -25,7 +27,7 @@ export const useExecuteTrade = () => {
     try {
       // 1. Get transaction XDR from backend (prepared for Soroban)
       // The backend should prepare the Soroban call (deposit USDC -> Contract)
-      const { data: { xdr } } = await apiClient.post('/trades/prepare', {
+      const { data: { xdr, transactionId } } = await apiClient.post('/trades/prepare', {
         marketId,
         outcomeId,
         amount: new Decimal(amount).toString(),
@@ -40,11 +42,13 @@ export const useExecuteTrade = () => {
       // Here we let the backend submit and verify to keep the ledger and DB in sync
       const { data: result } = await apiClient.post('/trades/execute', {
         signedXDR,
+        transactionId,
         marketId,
         outcomeId,
         amount,
       });
 
+      queryClient.invalidateQueries({ queryKey: ['user-market-transactions', user.id, marketId] });
       toast.success('Trade executed successfully!');
       return result;
     } catch (error: any) {
