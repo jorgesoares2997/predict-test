@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum KycStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum MarketStatus {
+  ACTIVE
+  LOCKED
+  RESOLVED
+}
+
+model User {
+  id             String        @id @default(uuid())
+  wallet_address String        @unique
+  didit_id       String?
+  kyc_status     KycStatus     @default(PENDING)
+  created_at     DateTime      @default(now())
+  transactions   Transaction[]
+}
+
+model Market {
+  id                String        @id @default(uuid())
+  title             String
+  description       String
+  status            MarketStatus  @default(ACTIVE)
+  category_id       String?
+  contract_address  String?
+  resolution_source String
+  closing_date      DateTime
+  liquidate_at      DateTime
+  category          Category?     @relation(fields: [category_id], references: [id])
+  results           Result[]
+  transactions      Transaction[]
+}
+
+model Category {
+  id      String   @id @default(uuid())
+  name    String   @unique
+  markets Market[]
+}
+
+model Result {
+  id           String        @id @default(uuid())
+  name         String
+  market_id    String
+  market       Market        @relation(fields: [market_id], references: [id])
+  transactions Transaction[]
+}
+
+model Transaction {
+  id         String   @id @default(uuid())
+  tx_hash    String   @unique
+  user_id    String
+  market_id  String
+  result_id  String
+  amount     Decimal
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id])
+  market     Market   @relation(fields: [market_id], references: [id])
+  result     Result   @relation(fields: [result_id], references: [id])
+}

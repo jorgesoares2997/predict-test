@@ -1,0 +1,185 @@
+# workthought
+
+Guia prático de testes manuais do frontend do `predict-io`.
+
+Objetivo: validar, ponta a ponta, cada função principal da interface já integrada com backend.
+
+---
+
+## 1) Pré-requisitos para teste
+
+Antes de abrir o app:
+
+1. Backend rodando e sem erro.
+2. Frontend rodando (`pnpm dev` em `frontend`).
+3. Carteira Stellar instalada (Freighter) e com conta carregada na rede correta.
+4. Variáveis `NEXT_PUBLIC_*` configuradas no frontend para a rede/contratos do ambiente.
+5. Se for testar KYC, `NEXT_PUBLIC_DIDIT_VERIFICATION_URL` preenchida.
+
+Resultado esperado:
+- Home abre sem erro de build/runtime.
+- Botão de conexão de carteira visível.
+
+---
+
+## 2) Teste de conexão de carteira
+
+### Passos
+1. Abrir a Home (`/`).
+2. Clicar em **Connect Wallet**.
+3. Aprovar conexão na carteira.
+
+### Validações
+- Endereço aparece truncado na UI (ex: `GABC...WXYZ`).
+- Estado de loading (`Connecting...`) aparece durante conexão.
+- Após conectar, a sessão permanece ativa ao navegar entre páginas.
+
+### Teste negativo
+- Recusar conexão na carteira.
+- Esperado: app não quebra; usuário permanece desconectado.
+
+---
+
+## 3) Teste do dashboard de mercados (`/`)
+
+### Passos
+1. Com carteira conectada, abrir home.
+2. Alternar abas/filtros de categoria (All/Crypto/Politics/Sports).
+3. Clicar em um card de mercado para abrir detalhes.
+
+### Validações
+- Lista de mercados carrega.
+- Skeleton aparece enquanto carrega e desaparece após resposta.
+- Navegação para `/markets/[id]` funciona.
+
+### Teste negativo
+- Simular backend offline.
+- Esperado: interface mostra fallback/erro sem crash completo da página.
+
+---
+
+## 4) Teste de trading (compra/venda)
+
+Tela alvo: `/markets/[id]`.
+
+### Passos (compra)
+1. Escolher um mercado ativo.
+2. Inserir valor de entrada.
+3. Confirmar operação.
+4. Aprovar assinatura na carteira.
+
+### Validações
+- Simulação/execução retorna sucesso.
+- Toast de sucesso aparece.
+- Dados de posição/saldo atualizam na interface.
+
+### Passos (venda)
+1. Na mesma tela, executar venda da posição.
+2. Assinar na carteira.
+
+### Validações
+- Transação enviada com sucesso.
+- UI reflete redução/encerramento da posição.
+
+### Testes negativos
+- Usuário sem KYC verificado tenta operar.
+  - Esperado: bloqueio com mensagem de KYC obrigatório.
+- Usuário desconectado tenta operar.
+  - Esperado: bloqueio com mensagem para conectar carteira.
+- Assinatura rejeitada na carteira.
+  - Esperado: erro tratado via toast, sem travar UI.
+
+---
+
+## 5) Teste de liquidez (LP)
+
+Tela alvo: modal/painel de liquidez no mercado.
+
+### Passos
+1. Abrir mercado.
+2. Inserir valor de depósito.
+3. Confirmar adição de liquidez.
+4. Assinar na carteira.
+
+### Validações
+- Operação finaliza com feedback de sucesso.
+- Saldo/posição LP atualizam.
+- Regras de input (mínimo, formato numérico) são respeitadas.
+
+### Teste negativo
+- Inserir valor inválido (vazio, zero, texto).
+- Esperado: botão desabilitado ou mensagem de validação.
+
+---
+
+## 6) Teste de KYC
+
+### Passos
+1. Com carteira conectada e usuário não verificado, clicar em **Verify Identity**.
+2. Fluxo Didit abre.
+3. Concluir (ou cancelar) verificação.
+
+### Validações
+- Fluxo abre sem erro de SDK.
+- Em sucesso: status muda para `pending` (ou equivalente definido no backend).
+- Toast correto aparece.
+
+### Teste negativo
+- Remover/invalidar `NEXT_PUBLIC_DIDIT_VERIFICATION_URL`.
+- Esperado: erro amigável de inicialização do KYC.
+
+---
+
+## 7) Teste de Portfolio (`/portfolio`)
+
+### Passos
+1. Navegar para Portfolio com carteira conectada.
+2. Conferir cards de resumo e lista de posições.
+
+### Validações
+- Sem posição: estado vazio renderiza corretamente.
+- Com posição: métricas e itens renderizam corretamente.
+- Navegação “Browse Markets” funciona.
+
+---
+
+## 8) Teste de Activity (`/activity`)
+
+### Passos
+1. Executar ao menos 1 trade.
+2. Abrir Activity.
+
+### Validações
+- Evento de trade aparece no histórico.
+- Ordenação temporal e dados principais (mercado, lado, valor, status) estão corretos.
+
+---
+
+## 9) Teste de logout/desconexão
+
+### Passos
+1. Abrir menu de conta na navbar.
+2. Clicar em **Disconnect**.
+
+### Validações
+- Endereço some da UI.
+- Botão volta para estado **Connect Wallet**.
+- Rotas protegidas/ações sensíveis voltam a exigir conexão.
+
+---
+
+## 10) Checklist final de aceite (smoke test)
+
+Rodar este fluxo completo em sequência:
+
+1. Conectar carteira.
+2. Abrir mercado.
+3. (Se necessário) iniciar KYC.
+4. Executar compra.
+5. Executar venda.
+6. Adicionar liquidez.
+7. Validar atualização em Portfolio.
+8. Validar evento em Activity.
+9. Desconectar carteira.
+
+Se todos os passos acima passarem sem erro crítico, o frontend está pronto para QA mais profundo/regressão.
