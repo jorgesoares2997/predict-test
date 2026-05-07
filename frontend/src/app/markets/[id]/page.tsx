@@ -10,6 +10,16 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Calendar, TrendingUp, ShieldCheck, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { marketCategoryLabel } from '@/lib/marketDisplay';
+import {
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  LinearScale,
+  Tooltip,
+} from 'chart.js';
+import { Bar } from 'react-chartjs-2';
+
+ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip);
 
 export default function MarketPage() {
   const params = useParams();
@@ -54,6 +64,10 @@ export default function MarketPage() {
     }
     return 0;
   };
+  const labels = market.outcomes.map((outcome) => outcome.name);
+  const percentages = market.outcomes.map((outcome) => Number(outcomePercent(outcome).toFixed(2)));
+  const palette = ['#f3f4f6', '#d1d5db', '#9ca3af', '#6b7280', '#4b5563', '#e5e7eb'];
+  const chartColors = labels.map((_, index) => palette[index % palette.length]);
 
   return (
     <div className="space-y-8">
@@ -74,24 +88,43 @@ export default function MarketPage() {
             <p className="text-xl text-muted-foreground">{market.description}</p>
           </div>
 
-          {/* Simple Price Visualization (Placeholder for a real chart) */}
           <Card className="bg-card/50 overflow-hidden">
-            <CardContent className="p-0">
-              <div className="h-[300px] w-full bg-gradient-to-t from-primary/5 to-transparent flex items-end p-8">
-                <div className="flex-1 flex gap-4 items-end">
-                  {market.outcomes.map((outcome, idx) => {
-                    const percent = outcomePercent(outcome);
-                    return (
-                    <div key={outcome.id} className="flex-1 flex flex-col items-center gap-4">
-                      <div 
-                        className={`w-full rounded-t-lg ${idx === 0 ? 'bg-primary' : 'bg-muted'}`}
-                        style={{ height: `${percent}%`, minHeight: '10%' }}
-                      />
-                      <span className="text-sm font-medium">{outcome.name} ({percent.toFixed(2)}%)</span>
-                    </div>
-                    );
-                  })}
-                </div>
+            <CardContent className="p-6">
+              <div className="h-[320px]">
+                <Bar
+                  data={{
+                    labels,
+                    datasets: [
+                      {
+                        label: 'Increase (%)',
+                        data: percentages,
+                        backgroundColor: chartColors,
+                        borderRadius: 8,
+                      },
+                    ],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                          callback: (value) => `${value}%`,
+                        },
+                      },
+                    },
+                    plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                        callbacks: {
+                          label: (ctx) => `${Number(ctx.parsed.y ?? 0).toFixed(2)}%`,
+                        },
+                      },
+                    },
+                  }}
+                />
               </div>
             </CardContent>
           </Card>

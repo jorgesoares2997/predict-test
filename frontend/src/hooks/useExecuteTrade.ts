@@ -49,6 +49,8 @@ export const useExecuteTrade = () => {
       });
 
       queryClient.invalidateQueries({ queryKey: ['user-market-transactions', user.id, marketId] });
+      queryClient.invalidateQueries({ queryKey: ['market', marketId] });
+      queryClient.invalidateQueries({ queryKey: ['markets'] });
       toast.success('Trade executed successfully!');
       return result;
     } catch (error: any) {
