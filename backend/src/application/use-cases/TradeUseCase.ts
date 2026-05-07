@@ -1,4 +1,4 @@
-import { IMarketRepository, IStellarService, ITransactionRepository } from '../ports';
+import { IMarketRepository, IResultRepository, IStellarService, ITransactionRepository } from '../ports';
 import { RegisterTradeDtoType } from '../dtos';
 import { DomainException, NotFoundException } from '../../domain/exceptions';
 import { KycStatus } from '@prisma/client';
@@ -10,6 +10,7 @@ export class TradeUseCase {
   constructor(
     private readonly transactionRepository: ITransactionRepository,
     private readonly marketRepository: IMarketRepository,
+    private readonly resultRepository: IResultRepository,
     private readonly stellarService: IStellarService
   ) {}
 
@@ -192,6 +193,27 @@ export class TradeUseCase {
       result_id: input.outcomeId,
       amount: Number(input.amount) as any,
     });
+
+    const marketTransactions = await this.transactionRepository.findAll({ market_id: input.marketId });
+    const finalizedTransactions = marketTransactions.filter((t) => !t.tx_hash.startsWith('pending:'));
+    const marketResults = await this.resultRepository.findAll({ market_id: input.marketId });
+    if (marketResults.length > 0) {
+      const totalLockedValue = finalizedTransactions.reduce((acc, current) => acc + Number(current.amount), 0);
+      await this.marketRepository.update(input.marketId, {
+        total_locked_value: totalLockedValue as any,
+      });
+
+      for (const result of marketResults) {
+        const resultTotalShares = finalizedTransactions
+          .filter((txItem) => txItem.result_id === result.id)
+          .reduce((acc, current) => acc + Number(current.amount), 0);
+        const currentPrice = totalLockedValue > 0 ? resultTotalShares / totalLockedValue : 0;
+        await this.resultRepository.update(result.id, {
+          total_shares: resultTotalShares as any,
+          current_price: currentPrice as any,
+        });
+      }
+    }
 
     return { txHash, transaction: tx };
   }

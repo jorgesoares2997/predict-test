@@ -4,8 +4,17 @@ export interface IUserRepository {
   findById(id: string): Promise<User | null>;
   findByWalletAddress(walletAddress: string): Promise<User | null>;
   findAll(): Promise<User[]>;
-  create(data: { wallet_address: string }): Promise<User>;
-  update(id: string, data: Partial<Pick<User, 'wallet_address' | 'didit_id' | 'kyc_status'>>): Promise<User>;
+  create(data: { wallet_address: string; name?: string | null; email?: string | null }): Promise<User>;
+  update(
+    id: string,
+    data: Partial<{
+      wallet_address: string;
+      didit_id: string | null;
+      kyc_status: KycStatus;
+      name: string | null;
+      email: string | null;
+    }>
+  ): Promise<User>;
   delete(id: string): Promise<User>;
   updateKycStatus(id: string, status: KycStatus, didit_id?: string): Promise<User>;
 }
@@ -13,14 +22,22 @@ export interface IUserRepository {
 export type MarketWithDetails = Market & { results: Result[]; category: Category | null };
 
 export interface IMarketRepository {
-  create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category'> & { results: string[] }): Promise<MarketWithDetails>;
+  create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category' | 'total_locked_value'> & { results: string[] }): Promise<MarketWithDetails>;
   findById(id: string): Promise<MarketWithDetails | null>;
   findAll(filters?: { status?: MarketStatus; category?: string }): Promise<MarketWithDetails[]>;
   update(
     id: string,
-    data: Partial<
-      Pick<Market, 'title' | 'description' | 'status' | 'category_id' | 'contract_address' | 'resolution_source' | 'closing_date' | 'liquidate_at'>
-    >
+    data: Partial<{
+      title: string;
+      description: string;
+      status: MarketStatus;
+      category_id: string | null;
+      contract_address: string | null;
+      resolution_source: string;
+      closing_date: Date;
+      liquidate_at: Date;
+      total_locked_value: any;
+    }>
   ): Promise<MarketWithDetails>;
   syncResults(marketId: string, results: { id?: string; name: string }[]): Promise<void>;
   delete(id: string): Promise<Market>;
@@ -29,10 +46,13 @@ export interface IMarketRepository {
 }
 
 export interface IResultRepository {
-  create(data: Omit<Result, 'id' | 'transactions' | 'market'>): Promise<Result>;
+  create(data: Omit<Result, 'id' | 'transactions' | 'market' | 'total_shares' | 'current_price'>): Promise<Result>;
   findById(id: string): Promise<Result | null>;
   findAll(filters?: { market_id?: string }): Promise<Result[]>;
-  update(id: string, data: Partial<Pick<Result, 'name' | 'market_id'>>): Promise<Result>;
+  update(
+    id: string,
+    data: Partial<{ name: string; market_id: string; total_shares: any; current_price: any }>
+  ): Promise<Result>;
   delete(id: string): Promise<Result>;
 }
 

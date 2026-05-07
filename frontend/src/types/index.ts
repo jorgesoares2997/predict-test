@@ -3,8 +3,9 @@ export type KYCStatus = 'none' | 'pending' | 'verified' | 'failed';
 export interface User {
   id: string;
   publicKey: string;
+  name?: string | null;
   kycStatus: KYCStatus;
-  email?: string;
+  email?: string | null;
   diditId?: string | null;
   createdAt?: string;
 }
@@ -20,7 +21,7 @@ export interface Market {
   category?: Category;
   status: 'active' | 'locked' | 'resolved';
   contractAddress?: string | null;
-  volume: string; // Decimal string
+  totalLockedValue: string; // Decimal string
   endsAt: string; // ISO date
   liquidateAt?: string;
   outcomes: Outcome[];
@@ -30,6 +31,7 @@ export interface Market {
 export interface Outcome {
   id: string;
   name: string;
+  totalShares?: string;
   price: string; // Decimal string (0-1 range typically, or USDC value)
 }
 

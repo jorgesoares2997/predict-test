@@ -11,6 +11,7 @@ interface AuthState {
   setAuth: (user: User, token: string) => void;
   setPublicKey: (publicKey: string | null) => void;
   setKYCStatus: (status: KYCStatus) => void;
+  updateUser: (user: User) => void;
   setAuthLoading: (loading: boolean) => void;
   logout: () => void;
 }
@@ -28,6 +29,12 @@ export const useAuthStore = create<AuthState>()(
       setKYCStatus: (status) =>
         set((state) => ({
           user: state.user ? { ...state.user, kycStatus: status } : null,
+        })),
+      updateUser: (user) =>
+        set((state) => ({
+          user,
+          publicKey: user.publicKey ?? state.publicKey,
+          isAuthenticated: Boolean(state.token),
         })),
       setAuthLoading: (isAuthLoading) => set({ isAuthLoading }),
       logout: () => set({ user: null, token: null, publicKey: null, isAuthenticated: false, isAuthLoading: false }),

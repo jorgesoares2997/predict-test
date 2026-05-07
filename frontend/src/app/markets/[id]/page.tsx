@@ -43,6 +43,18 @@ export default function MarketPage() {
     );
   }
 
+  const totalShares = market.outcomes.reduce((acc, outcome) => acc + Number(outcome.totalShares || 0), 0);
+  const outcomePercent = (outcome: { price: string; totalShares?: string }) => {
+    const priceRatio = Number(outcome.price);
+    if (Number.isFinite(priceRatio) && priceRatio > 0) {
+      return Math.max(0, Math.min(100, priceRatio * 100));
+    }
+    if (totalShares > 0) {
+      return (Number(outcome.totalShares || 0) / totalShares) * 100;
+    }
+    return 0;
+  };
+
   return (
     <div className="space-y-8">
       <Link href="/" className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-4">
@@ -67,15 +79,18 @@ export default function MarketPage() {
             <CardContent className="p-0">
               <div className="h-[300px] w-full bg-gradient-to-t from-primary/5 to-transparent flex items-end p-8">
                 <div className="flex-1 flex gap-4 items-end">
-                  {market.outcomes.map((outcome, idx) => (
+                  {market.outcomes.map((outcome, idx) => {
+                    const percent = outcomePercent(outcome);
+                    return (
                     <div key={outcome.id} className="flex-1 flex flex-col items-center gap-4">
                       <div 
                         className={`w-full rounded-t-lg ${idx === 0 ? 'bg-primary' : 'bg-muted'}`}
-                        style={{ height: `${parseFloat(outcome.price) * 100}%`, minHeight: '10%' }}
+                        style={{ height: `${percent}%`, minHeight: '10%' }}
                       />
-                      <span className="text-sm font-medium">{outcome.name} ({parseFloat(outcome.price) * 100}%)</span>
+                      <span className="text-sm font-medium">{outcome.name} ({percent.toFixed(2)}%)</span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </CardContent>
@@ -87,8 +102,8 @@ export default function MarketPage() {
                 <TrendingUp className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">Volume</p>
-                <p className="font-bold">${market.volume} USDC</p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">Total Allocated</p>
+                <p className="font-bold">${market.totalLockedValue} USDC</p>
               </div>
             </div>
             <div className="p-4 rounded-xl border bg-card/30 flex items-center gap-4">

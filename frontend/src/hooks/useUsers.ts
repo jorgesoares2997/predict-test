@@ -4,7 +4,9 @@ import { User } from '@/types';
 import { toast } from '@/lib/toast';
 
 type UpsertUserPayload = {
-  wallet_address: string;
+  wallet_address?: string;
+  name?: string | null;
+  email?: string | null;
   didit_id?: string | null;
   kyc_status?: 'PENDING' | 'VERIFIED' | 'REJECTED';
 };

@@ -17,13 +17,19 @@ export class PrismaUserRepository implements IUserRepository {
     return this.prisma.user.findMany({ orderBy: { created_at: 'desc' } });
   }
 
-  async create(data: { wallet_address: string }): Promise<User> {
+  async create(data: { wallet_address: string; name?: string | null; email?: string | null }): Promise<User> {
     return this.prisma.user.create({ data });
   }
 
   async update(
     id: string,
-    data: Partial<Pick<User, 'wallet_address' | 'didit_id' | 'kyc_status'>>
+    data: Partial<{
+      wallet_address: string;
+      didit_id: string | null;
+      kyc_status: KycStatus;
+      name: string | null;
+      email: string | null;
+    }>
   ): Promise<User> {
     return this.prisma.user.update({ where: { id }, data });
   }
@@ -43,7 +49,7 @@ export class PrismaUserRepository implements IUserRepository {
 export class PrismaMarketRepository implements IMarketRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category'> & { results: string[] }): Promise<Market & { results: Result[]; category: Category | null }> {
+  async create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category' | 'total_locked_value'> & { results: string[] }): Promise<Market & { results: Result[]; category: Category | null }> {
     return this.prisma.market.create({
       data: {
         title: data.title,
@@ -55,7 +61,7 @@ export class PrismaMarketRepository implements IMarketRepository {
         status: data.status,
         contract_address: data.contract_address,
         results: {
-          create: data.results.map((name) => ({ name })),
+          create: data.results.map((name) => ({ name, total_shares: 0, current_price: 0 })),
         },
       },
       include: { results: true, category: true },
@@ -95,9 +101,17 @@ export class PrismaMarketRepository implements IMarketRepository {
 
   async update(
     id: string,
-    data: Partial<
-      Pick<Market, 'title' | 'description' | 'status' | 'category_id' | 'contract_address' | 'resolution_source' | 'closing_date' | 'liquidate_at'>
-    >
+    data: Partial<{
+      title: string;
+      description: string;
+      status: MarketStatus;
+      category_id: string | null;
+      contract_address: string | null;
+      resolution_source: string;
+      closing_date: Date;
+      liquidate_at: Date;
+      total_locked_value: any;
+    }>
   ): Promise<Market & { results: Result[]; category: Category | null }> {
     return this.prisma.market.update({
       where: { id },
@@ -125,7 +139,7 @@ export class PrismaMarketRepository implements IMarketRepository {
     for (const r of results) {
       if (r.id) continue;
       await this.prisma.result.create({
-        data: { market_id: marketId, name: r.name.trim() },
+        data: { market_id: marketId, name: r.name.trim(), total_shares: 0, current_price: 0 },
       });
     }
 
@@ -203,7 +217,7 @@ export class PrismaCategoryRepository implements ICategoryRepository {
 export class PrismaResultRepository implements IResultRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(data: Omit<Result, 'id' | 'transactions' | 'market'>): Promise<Result> {
+  async create(data: Omit<Result, 'id' | 'transactions' | 'market' | 'total_shares' | 'current_price'>): Promise<Result> {
     return this.prisma.result.create({ data });
   }
 
@@ -217,7 +231,10 @@ export class PrismaResultRepository implements IResultRepository {
     });
   }
 
-  async update(id: string, data: Partial<Pick<Result, 'name' | 'market_id'>>): Promise<Result> {
+  async update(
+    id: string,
+    data: Partial<{ name: string; market_id: string; total_shares: any; current_price: any }>
+  ): Promise<Result> {
     return this.prisma.result.update({ where: { id }, data });
   }
 

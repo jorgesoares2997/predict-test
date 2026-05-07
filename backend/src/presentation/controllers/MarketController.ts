@@ -17,13 +17,14 @@ export class MarketController {
       : undefined,
     status: String(market.status || '').toLowerCase(),
     contractAddress: market.contract_address ?? null,
-    volume: String(market.volume ?? '0'),
+    totalLockedValue: String(market.total_locked_value ?? '0'),
     endsAt: market.closing_date,
     liquidateAt: market.liquidate_at,
     outcomes: (market.results || []).map((r: any) => ({
       id: r.id,
       name: r.name,
-      price: String(r.price ?? '0'),
+      totalShares: String(r.total_shares ?? '0'),
+      price: String(r.current_price ?? '0'),
     })),
   });
 

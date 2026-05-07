@@ -76,7 +76,7 @@ async function start() {
   const authUseCase = new AuthUseCase(userRepository, stellarService, process.env.JWT_SECRET as string);
   const categoryUseCase = new CategoryUseCase(categoryRepository);
   const marketUseCase = new MarketUseCase(marketRepository, stellarService);
-  const tradeUseCase = new TradeUseCase(transactionRepository, marketRepository, stellarService);
+  const tradeUseCase = new TradeUseCase(transactionRepository, marketRepository, resultRepository, stellarService);
   const oracleUseCase = new OracleUseCase(marketRepository, oracleService, stellarService);
 
   const authController = new AuthController(authUseCase);

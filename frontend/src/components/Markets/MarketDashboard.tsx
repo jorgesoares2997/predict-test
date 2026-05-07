@@ -106,7 +106,7 @@ function MarketCard({ market }: { market: Market }) {
             <div className="flex justify-between items-center pt-4 border-t border-muted/50">
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <TrendingUp className="h-4 w-4" />
-                <span>Vol: ${market.volume} USDC</span>
+                <span>Locked: ${market.totalLockedValue} USDC</span>
               </div>
               <div className="flex items-center gap-1 text-sm text-muted-foreground">
                 <Calendar className="h-4 w-4" />

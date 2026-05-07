@@ -21,6 +21,8 @@ enum MarketStatus {
 model User {
   id             String        @id @default(uuid())
   wallet_address String        @unique
+  name           String?
+  email          String?
   didit_id       String?
   kyc_status     KycStatus     @default(PENDING)
   created_at     DateTime      @default(now())
@@ -32,6 +34,7 @@ model Market {
   title             String
   description       String
   status            MarketStatus  @default(ACTIVE)
+  total_locked_value Decimal      @default(0)
   category_id       String?
   contract_address  String?
   resolution_source String
@@ -52,6 +55,8 @@ model Result {
   id           String        @id @default(uuid())
   name         String
   market_id    String
+  total_shares Decimal       @default(0)
+  current_price Decimal      @default(0)
   market       Market        @relation(fields: [market_id], references: [id])
   transactions Transaction[]
 }

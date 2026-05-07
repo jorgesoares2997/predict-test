@@ -34,12 +34,16 @@ export const DiditWebhookDto = z.object({
 
 export const CreateUserDto = z.object({
   wallet_address: z.string(),
+  name: z.string().min(2).max(120).optional(),
+  email: z.string().email().optional(),
   didit_id: z.string().optional(),
   kyc_status: z.nativeEnum(KycStatus).optional(),
 });
 
 export const UpdateUserDto = z.object({
   wallet_address: z.string().optional(),
+  name: z.string().min(2).max(120).nullable().optional(),
+  email: z.string().email().nullable().optional(),
   didit_id: z.string().nullable().optional(),
   kyc_status: z.nativeEnum(KycStatus).optional(),
 });

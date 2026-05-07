@@ -1,7 +1,7 @@
 import { IMarketRepository, IStellarService } from '../ports';
 import { CreateMarketDtoType } from '../dtos';
 import { NotFoundException } from '../../domain/exceptions';
-import { Market, MarketStatus } from '@prisma/client';
+import { MarketStatus } from '@prisma/client';
 
 export class MarketUseCase {
   constructor(
@@ -72,19 +72,17 @@ export class MarketUseCase {
     const { results, ...marketFields } = data;
     const payload = Object.fromEntries(
       Object.entries(marketFields).filter(([, v]) => v !== undefined)
-    ) as Partial<
-      Pick<
-        Market,
-        | 'title'
-        | 'description'
-        | 'status'
-        | 'category_id'
-        | 'contract_address'
-        | 'resolution_source'
-        | 'closing_date'
-        | 'liquidate_at'
-      >
-    >;
+    ) as Partial<{
+      title: string;
+      description: string;
+      status: MarketStatus;
+      category_id: string | null;
+      contract_address: string | null;
+      resolution_source: string;
+      closing_date: Date;
+      liquidate_at: Date;
+      total_locked_value: any;
+    }>;
 
     if (Object.keys(payload).length > 0) {
       await this.marketRepository.update(id, payload);
