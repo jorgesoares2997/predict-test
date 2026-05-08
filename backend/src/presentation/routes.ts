@@ -44,9 +44,9 @@ export const setupRoutes = (
   app.post('/markets', auth, marketController.createMarket);
   app.post('/trades', auth, tradeController.registerTrade);
   app.post('/api/markets', auth, marketController.createMarket);
-  app.post('/api/trades', auth, tradeController.registerTrade);
   app.patch('/api/markets/:id', auth, marketController.updateMarket);
   app.delete('/api/markets/:id', auth, marketController.deleteMarket);
+  app.post('/api/markets/:id/migrate-token', auth, marketController.migrateMarketToken);
 
   app.post('/api/users', auth, userController.createUser);
   app.get('/api/users', auth, userController.listUsers);

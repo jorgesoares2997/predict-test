@@ -56,12 +56,7 @@ export function Navbar() {
               <DropdownMenuContent>
                 <DropdownMenuItem 
                   render={
-                    <Link href="/admin/markets">Manage Markets</Link>
-                  }
-                />
-                <DropdownMenuItem 
-                  render={
-                    <Link href="/admin/categories">Manage Categories</Link>
+                    <Link href="/admin">Admin Console</Link>
                   }
                 />
               </DropdownMenuContent>

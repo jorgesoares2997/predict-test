@@ -106,4 +106,14 @@ export class MarketUseCase {
     }
     return this.marketRepository.delete(id);
   }
+
+  /** Migrate a market's token address on-chain (e.g. old test token → official USDC SAC). */
+  async migrateMarketToken(marketId: string, newTokenAddress: string) {
+    const existing = await this.marketRepository.findById(marketId);
+    if (!existing) {
+      throw new NotFoundException('Market not found');
+    }
+    await this.stellarService.migrateMarketToken(marketId, newTokenAddress);
+    return { marketId, newTokenAddress, success: true };
+  }
 }

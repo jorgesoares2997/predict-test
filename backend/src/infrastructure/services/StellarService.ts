@@ -301,18 +301,91 @@ export class StellarService implements IStellarService {
     return submitted.hash;
   }
 
-  async settleMarketContract(contractAddress: string, winningResultId: string): Promise<void> {
-    // Integration with Soroban Client to call the smart contract
-    console.log(`Simulating settlement of contract ${contractAddress} with winner ${winningResultId}`);
-    // In a real implementation:
-    // 1. Build Soroban transaction using SorobanRpc
-    // 2. Sign transaction with admin key
-    // 3. Submit transaction
-    // Example:
-    // const contract = new StellarSdk.Contract(contractAddress);
-    // const tx = new StellarSdk.TransactionBuilder(...)
-    //   .addOperation(contract.call('settle', ...args))
-    //   .build();
-    // await this.sorobanServer.sendTransaction(tx);
+  async settleMarketContract(marketId: string, winningOutcomeIndex: number): Promise<void> {
+    this.ensureContractEnv();
+    if (!this.operatorPublicKey || !this.operatorSecretKey) {
+      console.warn('[settleMarketContract] missing operator env vars, skipping on-chain settlement');
+      return;
+    }
+
+    const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
+    const contract = new StellarSdk.Contract(this.marketContractId);
+    
+    const op = contract.call(
+      'settle_market',
+      new StellarSdk.Address(this.operatorPublicKey).toScVal(),
+      StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
+      StellarSdk.nativeToScVal(winningOutcomeIndex, { type: 'u32' })
+    );
+
+    const tx = new StellarSdk.TransactionBuilder(source, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    })
+      .addOperation(op)
+      .setTimeout(60)
+      .build();
+
+    const prepared = await this.sorobanServer.prepareTransaction(tx);
+    prepared.sign(StellarSdk.Keypair.fromSecret(this.operatorSecretKey));
+    
+    const submitted = await this.sorobanServer.sendTransaction(prepared);
+    if (submitted.status === 'ERROR') {
+      const msg = submitted.errorResult
+        ? JSON.stringify(submitted.errorResult)
+        : 'settle_market submission failed';
+      throw new Error(msg);
+    }
+    if (submitted.hash) {
+      await this.waitForRpcTransaction(submitted.hash);
+    }
+  }
+
+  async migrateMarketToken(marketId: string, newTokenAddress: string): Promise<void> {
+    this.ensureContractEnv();
+    if (!this.operatorPublicKey || !this.operatorSecretKey) {
+      throw new Error('[migrateMarketToken] OPERATOR_PUBLIC_KEY / OPERATOR_SECRET_KEY not configured');
+    }
+
+    const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
+    const contract = new StellarSdk.Contract(this.marketContractId);
+
+    const op = contract.call(
+      'migrate_market_token',
+      new StellarSdk.Address(this.operatorPublicKey).toScVal(),
+      StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
+      new StellarSdk.Address(newTokenAddress).toScVal()
+    );
+
+    const tx = new StellarSdk.TransactionBuilder(source, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    })
+      .addOperation(op)
+      .setTimeout(60)
+      .build();
+
+    const prepared = await this.sorobanServer.prepareTransaction(tx);
+    prepared.sign(StellarSdk.Keypair.fromSecret(this.operatorSecretKey));
+
+    const submitted = await this.sorobanServer.sendTransaction(prepared);
+    if (submitted.status === 'ERROR') {
+      const msg = submitted.errorResult
+        ? JSON.stringify(submitted.errorResult)
+        : 'migrate_market_token submission failed';
+      throw new Error(msg);
+    }
+    if (submitted.hash) {
+      await this.waitForRpcTransaction(submitted.hash);
+    }
+    console.log(`[migrateMarketToken] Market ${marketId} token migrated to ${newTokenAddress}`);
+  }
+
+  getTransactionHash(xdr: string): string {
+    const tx = StellarSdk.TransactionBuilder.fromXDR(xdr, this.networkPassphrase);
+    if (tx instanceof StellarSdk.FeeBumpTransaction) {
+      throw new Error('Fee bump transaction not supported');
+    }
+    return tx.hash().toString('hex');
   }
 }

@@ -96,7 +96,9 @@ export interface IStellarService {
     amountStroops: bigint;
   }): Promise<string>;
   submitSignedContractTransaction(signedXdr: string): Promise<string>;
-  settleMarketContract(contractAddress: string, winningResultId: string): Promise<void>;
+  settleMarketContract(marketId: string, winningOutcomeIndex: number): Promise<void>;
+  migrateMarketToken(marketId: string, newTokenAddress: string): Promise<void>;
+  getTransactionHash(xdr: string): string;
 }
 
 export interface IOracleService {

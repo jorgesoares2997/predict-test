@@ -34,22 +34,22 @@ export class OracleUseCase {
         const marketDetails = await this.marketRepository.findById(market.id);
         if (!marketDetails) continue;
 
-        const winningResult = marketDetails.results.find(
+        const winningOutcomeIndex = marketDetails.results.findIndex(
           (r) => r.name.toLowerCase() === winningResultName.toLowerCase()
         );
 
-        if (!winningResult) {
+        if (winningOutcomeIndex < 0) {
           console.warn(`[OracleUseCase] Winning result "${winningResultName}" not found in market ${market.id} options`);
           continue;
         }
 
         if (market.contract_address) {
-          await this.stellarService.settleMarketContract(market.contract_address, winningResult.id);
+          await this.stellarService.settleMarketContract(market.id, winningOutcomeIndex);
         }
 
         // Update to resolved
         await this.marketRepository.updateStatus(market.id, MarketStatus.RESOLVED);
-        console.log(`[OracleUseCase] Successfully liquidated market ${market.id}. Winner: ${winningResult.name}`);
+        console.log(`[OracleUseCase] Successfully liquidated market ${market.id}. Winner: ${winningResultName}`);
       } catch (error) {
         console.error(`[OracleUseCase] Error processing market ${market.id}:`, error);
       }

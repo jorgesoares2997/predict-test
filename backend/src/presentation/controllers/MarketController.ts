@@ -65,4 +65,14 @@ export class MarketController {
     await this.marketUseCase.deleteMarket(id);
     return reply.status(204).send();
   };
+
+  migrateMarketToken = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string };
+    const { newTokenAddress } = request.body as { newTokenAddress: string };
+    if (!newTokenAddress) {
+      return reply.status(400).send({ error: 'newTokenAddress is required' });
+    }
+    const result = await this.marketUseCase.migrateMarketToken(id, newTokenAddress);
+    return reply.status(200).send(result);
+  };
 }

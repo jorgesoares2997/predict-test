@@ -132,14 +132,16 @@ export class TradeUseCase {
       });
     }
 
+    const expectedHashHex = this.stellarService.getTransactionHash(xdr);
+
     const reservedTransaction = existingPrediction
       ? await this.transactionRepository.update(existingPrediction.id, {
-          tx_hash: `pending:${randomUUID()}`,
+          tx_hash: `pending:${expectedHashHex}`,
           result_id: input.outcomeId,
           amount: Number(input.amount) as any,
         })
       : await this.transactionRepository.create({
-          tx_hash: `pending:${randomUUID()}`,
+          tx_hash: `pending:${expectedHashHex}`,
           user_id: input.userId,
           market_id: input.marketId,
           result_id: input.outcomeId,
@@ -166,6 +168,11 @@ export class TradeUseCase {
     const reserved = await this.transactionRepository.findById(input.transactionId);
     if (!reserved || reserved.user_id !== input.userId || reserved.market_id !== input.marketId) {
       throw new DomainException('Reserved transaction not found');
+    }
+
+    const submittedHashHex = this.stellarService.getTransactionHash(input.signedXdr);
+    if (reserved.tx_hash !== `pending:${submittedHashHex}`) {
+      throw new DomainException('Signed transaction payload does not match the prepared transaction. Tampering detected.');
     }
 
     const txHash = await this.stellarService.submitSignedContractTransaction(input.signedXdr);
