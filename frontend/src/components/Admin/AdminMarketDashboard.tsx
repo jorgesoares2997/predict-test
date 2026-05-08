@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useMarkets } from '@/hooks/useMarkets';
 import { useContractStats, useMarketOnChainPool, stroopsToUsdc } from '@/hooks/useContractStats';
+import { useTransactions } from '@/hooks/useTransactions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -202,6 +203,7 @@ function MarketDashboardRow({ market, index }: { market: Market; index: number }
 export default function AdminMarketDashboard() {
   const { data: markets, isLoading: marketsLoading, refetch } = useMarkets();
   const { data: contractStats, isLoading: statsLoading, refetch: refetchStats } = useContractStats();
+  const { data: transactions, isLoading: txsLoading, refetch: refetchTxs } = useTransactions();
   const [refreshing, setRefreshing] = useState(false);
 
   const MARKET_CONTRACT_ID = process.env.NEXT_PUBLIC_MARKET_CONTRACT_ID || '';
@@ -212,7 +214,7 @@ export default function AdminMarketDashboard() {
 
   async function handleRefresh() {
     setRefreshing(true);
-    await Promise.all([refetch(), refetchStats()]);
+    await Promise.all([refetch(), refetchStats(), refetchTxs()]);
     setRefreshing(false);
   }
 
@@ -432,6 +434,89 @@ export default function AdminMarketDashboard() {
           </CardContent>
         </Card>
       )}
+      {/* ── Recent Platform Transactions ─────────────────────────────────── */}
+      <Card className="border border-border/60">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-primary" />
+                Recent Platform Predictions
+              </CardTitle>
+              <CardDescription>
+                Live stream of all predictions across all markets.
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 border-y border-border/50">
+                <tr>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">User ID</th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Market ID</th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Amount</th>
+                  <th className="h-10 px-4 text-left font-medium text-muted-foreground">Hash</th>
+                  <th className="h-10 px-4 text-right font-medium text-muted-foreground">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {txsLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <tr key={i} className="border-b border-border/50">
+                      {Array.from({ length: 5 }).map((_, j) => (
+                        <td key={j} className="p-4"><Skeleton className="h-5 w-full" /></td>
+                      ))}
+                    </tr>
+                  ))
+                ) : !transactions || transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="h-32 text-center text-muted-foreground">
+                      No transactions recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  transactions.slice(0, 10).map((tx) => (
+                    <tr key={tx.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                      <td className="p-4 font-mono text-[10px] text-muted-foreground">
+                        {tx.user_id.slice(0, 8)}...
+                      </td>
+                      <td className="p-4">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-medium truncate max-w-[150px]">
+                            {tx.market?.title || 'Market'}
+                          </span>
+                          <span className="text-[9px] text-muted-foreground font-mono">
+                            {tx.result?.name || 'Outcome'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-4 font-semibold">
+                        {tx.amount} <span className="text-[10px] text-muted-foreground ml-0.5">USDC</span>
+                      </td>
+                      <td className="p-4">
+                        <a 
+                          href={`https://stellar.expert/explorer/testnet/tx/${tx.tx_hash}`} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[11px] text-blue-400 hover:underline font-mono"
+                        >
+                          {tx.tx_hash.slice(0, 6)}...{tx.tx_hash.slice(-6)}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </td>
+                      <td className="p-4 text-right text-xs text-muted-foreground">
+                        {tx.created_at ? format(new Date(tx.created_at), 'MMM dd HH:mm') : '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

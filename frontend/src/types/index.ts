@@ -53,6 +53,8 @@ export interface TransactionRecord {
   result_id: string;
   amount: string;
   created_at: string;
+  market?: Market;
+  result?: Outcome;
 }
 
 export interface Category {

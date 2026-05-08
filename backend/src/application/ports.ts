@@ -20,6 +20,7 @@ export interface IUserRepository {
 }
 
 export type MarketWithDetails = Market & { results: Result[]; category: Category | null };
+export type TransactionWithDetails = Transaction & { market: Market; result: Result };
 
 export interface IMarketRepository {
   create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category' | 'total_locked_value'> & { results: string[] }): Promise<MarketWithDetails>;
@@ -71,7 +72,7 @@ export interface ITransactionRepository {
   create(data: Omit<Transaction, 'id' | 'created_at'>): Promise<Transaction>;
   findById(id: string): Promise<Transaction | null>;
   findByUserAndMarket(userId: string, marketId: string): Promise<Transaction | null>;
-  findAll(filters?: { user_id?: string; market_id?: string; result_id?: string }): Promise<Transaction[]>;
+  findAll(filters?: { user_id?: string; market_id?: string; result_id?: string }): Promise<TransactionWithDetails[]>;
   findByTxHash(txHash: string): Promise<Transaction | null>;
   update(
     id: string,

@@ -261,13 +261,14 @@ export class PrismaTransactionRepository implements ITransactionRepository {
     });
   }
 
-  async findAll(filters?: { user_id?: string; market_id?: string; result_id?: string }): Promise<Transaction[]> {
+  async findAll(filters?: { user_id?: string; market_id?: string; result_id?: string }): Promise<(Transaction & { market: Market; result: Result })[]> {
     return this.prisma.transaction.findMany({
       where: {
         user_id: filters?.user_id,
         market_id: filters?.market_id,
         result_id: filters?.result_id,
       },
+      include: { market: true, result: true },
       orderBy: { created_at: 'desc' },
     });
   }
