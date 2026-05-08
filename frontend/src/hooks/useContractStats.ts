@@ -55,11 +55,18 @@ async function fetchContractUsdcBalance(): Promise<bigint> {
 
   try {
     const sim = await server.simulateTransaction(tx);
-    if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) return 0n;
+    if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) {
+      console.warn('[useContractStats] Simulation failed:', sim);
+      return 0n;
+    }
     const result = (sim as StellarSdk.rpc.Api.SimulateTransactionSuccessResponse).result;
     if (!result?.retval) return 0n;
-    return scValToI128(result.retval);
-  } catch {
+    
+    const balance = scValToI128(result.retval);
+    console.log(`[useContractStats] Fetched balance for ${MARKET_CONTRACT_ID}: ${balance.toString()} stroops`);
+    return balance;
+  } catch (err) {
+    console.error('[useContractStats] Error fetching balance:', err);
     return 0n;
   }
 }
@@ -97,16 +104,23 @@ async function fetchMarketOnChainPool(marketId: string): Promise<bigint> {
 
   try {
     const sim = await server.simulateTransaction(tx);
-    if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) return 0n;
+    if (!StellarSdk.rpc.Api.isSimulationSuccess(sim)) {
+      console.warn(`[useMarketOnChainPool] Simulation failed for market ${marketId}:`, sim);
+      return 0n;
+    }
     const result = (sim as StellarSdk.rpc.Api.SimulateTransactionSuccessResponse).result;
     if (!result?.retval) return 0n;
 
     // The retval is Option<Market>, unwrap and extract total_pool field
     const native = StellarSdk.scValToNative(result.retval);
-    if (!native || typeof native !== 'object') return 0n;
+    if (!native || typeof native !== 'object') {
+      console.warn(`[useMarketOnChainPool] Market ${marketId} not found on-chain (returned None)`);
+      return 0n;
+    }
     const pool = native.total_pool ?? native.totalPool ?? 0;
     return BigInt(pool.toString());
-  } catch {
+  } catch (err) {
+    console.error(`[useMarketOnChainPool] Error fetching pool for market ${marketId}:`, err);
     return 0n;
   }
 }

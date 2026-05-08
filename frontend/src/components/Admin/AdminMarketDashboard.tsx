@@ -6,6 +6,7 @@ import { useContractStats, useMarketOnChainPool, stroopsToUsdc } from '@/hooks/u
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import Link from 'next/link';
 import {
   Wallet,
   TrendingUp,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   Database,
   Layers,
+  ArrowUpRight,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { marketCategoryLabel } from '@/lib/marketDisplay';
@@ -104,9 +106,19 @@ function MarketDashboardRow({ market, index }: { market: Market; index: number }
     >
       {/* Market */}
       <td className="p-4">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-sm leading-tight">{market.title}</span>
-          <span className="text-xs text-muted-foreground">{marketCategoryLabel(market)}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="font-semibold text-sm leading-tight">{market.title}</span>
+            <span className="text-xs text-muted-foreground">{marketCategoryLabel(market)}</span>
+          </div>
+          <Link
+            href={`/markets/${market.id}`}
+            target="_blank"
+            className="p-1.5 rounded-lg bg-muted/50 hover:bg-primary/20 hover:text-primary transition-all group/link"
+            title="View Market Page"
+          >
+            <ArrowUpRight className="h-3.5 w-3.5 group-hover/link:scale-110 transition-transform" />
+          </Link>
         </div>
       </td>
 
