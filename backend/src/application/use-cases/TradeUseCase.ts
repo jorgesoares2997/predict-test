@@ -102,13 +102,24 @@ export class TradeUseCase {
       throw new DomainException('You already placed a prediction in this market');
     }
 
+    let contractOutcomeIndex = outcomeIndex;
+    if (market.oracle_asset) {
+      const outcomeName = market.results[outcomeIndex].name.toLowerCase();
+      if (outcomeName === 'sim' || outcomeName === 'up') {
+        contractOutcomeIndex = 1;
+      } else {
+        contractOutcomeIndex = -1;
+      }
+    }
+
     let xdr: string;
     try {
       xdr = await this.stellarService.preparePlaceBetXdr({
         userPublicKey: input.userPublicKey,
         marketId: input.marketId,
-        outcomeIndex,
+        outcomeIndex: contractOutcomeIndex,
         amountStroops,
+        oracleAsset: market.oracle_asset ?? undefined,
       });
     } catch (error: any) {
       const message = String(error?.message || '');
@@ -127,8 +138,9 @@ export class TradeUseCase {
       xdr = await this.stellarService.preparePlaceBetXdr({
         userPublicKey: input.userPublicKey,
         marketId: input.marketId,
-        outcomeIndex,
+        outcomeIndex: contractOutcomeIndex,
         amountStroops,
+        oracleAsset: market.oracle_asset ?? undefined,
       });
     }
 
@@ -246,6 +258,65 @@ export class TradeUseCase {
       throw new NotFoundException('Transaction not found');
     }
     return this.transactionRepository.update(id, { ...data, amount: data.amount as any });
+  }
+
+  async prepareClaim(input: {
+    userId: string;
+    userPublicKey: string;
+    marketId: string;
+  }) {
+    const market = await this.marketRepository.findById(input.marketId);
+    if (!market) {
+      throw new NotFoundException('Market not found');
+    }
+    if (market.status !== 'RESOLVED') {
+      throw new DomainException('Market is not settled yet');
+    }
+
+    const xdr = await this.stellarService.prepareClaimWinningsXdr({
+      userPublicKey: input.userPublicKey,
+      marketId: input.marketId,
+      oracleAsset: market.oracle_asset ?? undefined,
+    });
+
+    const expectedHashHex = this.stellarService.getTransactionHash(xdr);
+
+    const reservedTransaction = await this.transactionRepository.create({
+      tx_hash: `pending-claim:${expectedHashHex}`,
+      user_id: input.userId,
+      market_id: input.marketId,
+      result_id: market.results[0]?.id || '', // Just a placeholder for claim
+      amount: 0 as any,
+    });
+
+    return {
+      xdr,
+      transactionId: reservedTransaction.id,
+    };
+  }
+
+  async executeClaim(input: {
+    userId: string;
+    signedXdr: string;
+    transactionId: string;
+  }) {
+    const reserved = await this.transactionRepository.findById(input.transactionId);
+    if (!reserved || reserved.user_id !== input.userId) {
+      throw new DomainException('Reserved claim transaction not found');
+    }
+
+    const submittedHashHex = this.stellarService.getTransactionHash(input.signedXdr);
+    if (reserved.tx_hash !== `pending-claim:${submittedHashHex}`) {
+      throw new DomainException('Signed claim payload does not match the prepared transaction. Tampering detected.');
+    }
+
+    const txHash = await this.stellarService.submitSignedContractTransaction(input.signedXdr);
+
+    const tx = await this.transactionRepository.update(reserved.id, {
+      tx_hash: `claim:${txHash}`, // Prefix with claim: to differentiate from bet transactions
+    });
+
+    return { txHash, transaction: tx };
   }
 
   async deleteTransaction(id: string) {

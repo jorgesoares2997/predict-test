@@ -31,6 +31,11 @@ type MarketFormValues = {
   closingDate: string;
   liquidateAt: string;
   outcomes: OutcomeFormRow[];
+  marketType: 'standard' | 'oracle';
+  oracleAsset?: string;
+  initialPrice?: string;
+  oracleContractAddress?: string;
+  oracleDecimals?: number;
 };
 
 function toDatetimeLocal(value?: string): string {
@@ -49,14 +54,17 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
     const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     return {
       title: '',
-      description: '',
+      description: 'Market created via Admin UI',
       resolutionSource: '',
       categoryId: '',
       status: 'active',
       contractAddress: '',
       closingDate: toDatetimeLocal(in24h.toISOString()),
       liquidateAt: toDatetimeLocal(in24h.toISOString()),
-      outcomes: [{ name: 'Yes' }, { name: 'No' }],
+      outcomes: [{ name: 'Sim' }, { name: 'Não' }],
+      marketType: 'standard',
+      oracleContractAddress: process.env.NEXT_PUBLIC_REFLECTOR_CONTRACT_ID || '',
+      oracleDecimals: 14,
     };
   }
 
@@ -73,7 +81,12 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
     outcomes:
       initialData.outcomes?.length > 0
         ? initialData.outcomes.map((o) => ({ id: o.id, name: o.name }))
-        : [{ name: 'Yes' }, { name: 'No' }],
+        : [{ name: 'Sim' }, { name: 'Não' }],
+    marketType: initialData.oracleAsset ? 'oracle' : 'standard',
+    oracleAsset: initialData.oracleAsset ?? '',
+    initialPrice: (initialData as any).initialPrice ?? '',
+    oracleContractAddress: (initialData as any).oracleContractAddress ?? process.env.NEXT_PUBLIC_REFLECTOR_CONTRACT_ID ?? '',
+    oracleDecimals: (initialData as any).oracleDecimals ?? 14,
   };
 }
 
@@ -103,6 +116,23 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
   const outcomes = watch('outcomes');
   const selectedCategoryId = watch('categoryId');
   const status = watch('status');
+  const marketType = watch('marketType');
+
+  // Lógica automática: Categoria "Cripto" ativa o modo Oracle
+  useEffect(() => {
+    const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
+    if (selectedCategory?.name.toLowerCase() === 'cripto') {
+      setValue('marketType', 'oracle');
+    }
+  }, [selectedCategoryId, categories, setValue]);
+
+  // Ao trocar para Oracle, forçamos os outcomes e o contrato padrão
+  useEffect(() => {
+    if (marketType === 'oracle') {
+      setValue('outcomes', [{ name: 'Sim' }, { name: 'Não' }]);
+      setValue('contractAddress', process.env.NEXT_PUBLIC_REFLECTOR_CONTRACT_ID || '');
+    }
+  }, [marketType, setValue]);
 
   const addOutcome = () => {
     setValue('outcomes', [...outcomes, { name: '' }]);
@@ -134,35 +164,58 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
         {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          placeholder="Provide more context about the market and resolution criteria..."
-          {...register('description', {
-            required: 'Description is required',
-            minLength: { value: 10, message: 'Description must be at least 10 characters' },
-          })}
-        />
-        {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
-      </div>
+      <input type="hidden" {...register('description', { required: true })} />
 
-      <div className="space-y-2">
-        <Label htmlFor="resolutionSource">Resolution Source (URL)</Label>
-        <Input
-          id="resolutionSource"
-          type="url"
-          placeholder="https://example.com/how-this-market-resolves"
-          {...register('resolutionSource', {
-            required: 'Resolution URL is required',
-            pattern: {
-              value: /^https?:\/\/.+/i,
-              message: 'Enter a valid http(s) URL',
-            },
-          })}
-        />
-        {errors.resolutionSource && (
-          <p className="text-xs text-destructive">{errors.resolutionSource.message}</p>
+
+      <div className="grid grid-cols-2 gap-4 border-y py-4 bg-muted/20 px-4 -mx-4">
+        <div className="space-y-2">
+          <Label htmlFor="marketType">Market Type</Label>
+          <input type="hidden" {...register('marketType', { required: true })} />
+          <Select value={marketType} onValueChange={(value) => setValue('marketType', value as 'standard' | 'oracle')}>
+            <SelectTrigger className="w-full bg-background">
+              <SelectValue placeholder="Select type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="standard">Standard (Manual)</SelectItem>
+              <SelectItem value="oracle">Oracle (Reflector)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {marketType === 'oracle' && (
+          <div className="col-span-2 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="oracleAsset">Oracle Asset (Reflector Symbol)</Label>
+              <Input
+                id="oracleAsset"
+                placeholder="Ex: BTC, ETH, SOL"
+                {...register('oracleAsset', { required: marketType === 'oracle' })}
+                className="bg-background font-bold"
+              />
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="oracleDecimals">Decimals</Label>
+                <Input
+                  id="oracleDecimals"
+                  type="number"
+                  placeholder="14"
+                  {...register('oracleDecimals', { valueAsNumber: true })}
+                  className="bg-background"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="oracleContractAddress">Contract Address</Label>
+                <Input
+                  id="oracleContractAddress"
+                  placeholder="Contract ID (C...)"
+                  {...register('oracleContractAddress')}
+                  className="bg-background font-mono text-xs"
+                />
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -171,11 +224,15 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
           <Label htmlFor="categoryId">Category</Label>
           <input type="hidden" {...register('categoryId', { required: 'Category is required' })} />
           <Select
-            value={selectedCategoryId?.trim() ? selectedCategoryId : undefined}
+            value={selectedCategoryId || null}
             onValueChange={(value) => setValue('categoryId', value ?? '')}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a category" />
+              <span className="truncate">
+                {selectedCategoryId 
+                  ? categories?.find((c) => c.id === selectedCategoryId)?.name || selectedCategoryId 
+                  : "Select a category"}
+              </span>
             </SelectTrigger>
             <SelectContent>
               {categories?.map((cat) => (
@@ -226,21 +283,15 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="contractAddress">Contract Address</Label>
-        <Input
-          id="contractAddress"
-          placeholder="Optional contract address"
-          {...register('contractAddress')}
-        />
-      </div>
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Label>Outcomes</Label>
-          <Button type="button" variant="outline" size="sm" onClick={addOutcome}>
-            <Plus className="mr-2 h-4 w-4" /> Add Outcome
-          </Button>
+          {marketType === 'standard' && (
+            <Button type="button" variant="outline" size="sm" onClick={addOutcome}>
+              <Plus className="mr-2 h-4 w-4" /> Add Outcome
+            </Button>
+          )}
         </div>
 
         <div className="space-y-3">
@@ -251,6 +302,8 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
                 {...register(`outcomes.${index}.name` as const, {
                   required: 'Outcome name is required',
                 })}
+                readOnly={marketType === 'oracle'}
+                className={marketType === 'oracle' ? 'bg-muted font-semibold' : ''}
               />
               {outcomes.length > 2 && (
                 <Button

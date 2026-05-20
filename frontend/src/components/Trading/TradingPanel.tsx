@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useExecuteTrade } from '@/hooks/useExecuteTrade';
+import { useClaimWinnings } from '@/hooks/useClaimWinnings';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Wallet, Copy, ExternalLink } from 'lucide-react';
 import { toast } from '@/lib/toast';
@@ -16,6 +17,7 @@ export function TradingPanel({ market }: { market: Market }) {
   const [amount, setAmount] = useState<string>('');
   const [selectedOutcome, setSelectedOutcome] = useState<string | null>(null);
   const { executeTrade, isProcessing } = useExecuteTrade();
+  const { executeClaim, isProcessing: isClaiming } = useClaimWinnings();
   const { user } = useAuthStore();
   const { data: userTransactions } = useQuery<TransactionRecord[]>({
     queryKey: ['user-market-transactions', user?.id, market.id],
@@ -32,6 +34,9 @@ export function TradingPanel({ market }: { market: Market }) {
   });
   const existingPrediction = userTransactions?.find((tx) => !tx.tx_hash.startsWith('pending:'));
   const selectedPredictionName = market.outcomes.find((o) => o.id === existingPrediction?.result_id)?.name ?? existingPrediction?.result_id;
+  
+  const isSettled = market.status === 'resolved' || market.status === 'settled';
+  const isWinner = isSettled && existingPrediction && existingPrediction.result_id === market.resolvedOutcomeId;
 
   const handleTrade = async () => {
     if (!selectedOutcome) {
@@ -67,6 +72,13 @@ export function TradingPanel({ market }: { market: Market }) {
     );
   }
 
+  const selectedOutcomeData = market.outcomes.find(o => o.id === selectedOutcome);
+  const averagePrice = selectedOutcomeData ? Number(selectedOutcomeData.price) : 0;
+  const amountNum = parseFloat(amount) || 0;
+  const shares = averagePrice > 0 ? amountNum / averagePrice : 0;
+  const profitPerShare = averagePrice > 0 ? 1 - averagePrice : 0;
+  const expectedProfit = shares * profitPerShare;
+
   return (
     <>
       <Card className="sticky top-24">
@@ -83,9 +95,10 @@ export function TradingPanel({ market }: { market: Market }) {
                 variant={selectedOutcome === outcome.id ? 'default' : 'outline'}
                 className="h-16 flex flex-col items-center justify-center gap-1"
                 onClick={() => setSelectedOutcome(outcome.id)}
+                disabled={isSettled}
               >
                 <span className="font-bold">{outcome.name}</span>
-                <span className="text-xs opacity-70">${outcome.price} USDC</span>
+                <span className="text-xs opacity-70">{(Number(outcome.price) * 100).toFixed(2)}¢</span>
               </Button>
             ))}
           </div>
@@ -99,20 +112,66 @@ export function TradingPanel({ market }: { market: Market }) {
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="text-lg h-12"
+            disabled={isSettled}
           />
-          <div className="flex justify-between text-xs text-muted-foreground">
+          {!isSettled && (
+            <div className="flex gap-2 mt-2">
+              {[1, 5, 10, 100].map(val => (
+                <Button key={val} variant="outline" size="sm" onClick={() => setAmount((amountNum + val).toString())} className="flex-1">
+                  +${val}
+                </Button>
+              ))}
+            </div>
+          )}
+          
+          <div className="flex justify-between text-xs text-muted-foreground mt-2">
             <span>Balance: 0.00 USDC</span>
             <span className="cursor-pointer text-primary">Max</span>
           </div>
+
+          {!isSettled && amountNum > 0 && selectedOutcomeData && averagePrice > 0 && (
+            <div className="bg-muted/30 p-3 rounded-md text-sm space-y-1 mt-4">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Preço médio</span>
+                <span>{(averagePrice * 100).toFixed(2)}¢</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Ações estimadas</span>
+                <span>{shares.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-green-500 mt-2 border-t pt-2 border-border/50">
+                <span>Lucro Potencial</span>
+                <span>+${expectedProfit.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
         </div>
 
-        <Button
-          onClick={handleTrade}
-          disabled={Boolean(existingPrediction) || isProcessing || !amount || !selectedOutcome}
-          className="w-full h-12 text-lg font-bold"
-        >
-          {existingPrediction ? 'Prediction already submitted' : isProcessing ? 'Processing...' : 'Execute Trade'}
-        </Button>
+        {isSettled ? (
+          existingPrediction ? (
+            isWinner ? (
+               <Button onClick={() => executeClaim({ marketId: market.id })} disabled={isClaiming || existingPrediction.tx_hash.startsWith('claim:')} className="w-full h-12 text-lg font-bold bg-green-600 hover:bg-green-700">
+                 {existingPrediction.tx_hash.startsWith('claim:') ? 'Valores Recebidos' : isClaiming ? 'Processando...' : 'Receber Valores'}
+               </Button>
+            ) : (
+               <Button onClick={() => window.location.href = '/'} className="w-full h-12 text-lg font-bold" variant="outline">
+                 Fazer outra predição
+               </Button>
+            )
+          ) : (
+             <Button disabled className="w-full h-12 text-lg font-bold">
+               Mercado Finalizado
+             </Button>
+          )
+        ) : (
+          <Button
+            onClick={handleTrade}
+            disabled={Boolean(existingPrediction) || isProcessing || !amount || !selectedOutcome}
+            className="w-full h-12 text-lg font-bold"
+          >
+            {existingPrediction ? 'Prediction already submitted' : isProcessing ? 'Processing...' : 'Execute Trade'}
+          </Button>
+        )}
 
         <p className="text-[10px] text-center text-muted-foreground">
           By clicking Execute Trade, you agree to the Terms of Service.

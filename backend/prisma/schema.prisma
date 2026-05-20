@@ -5,6 +5,9 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+generator erd {
+  provider = "prisma-erd-generator"
+}
 
 enum KycStatus {
   PENDING
@@ -40,6 +43,13 @@ model Market {
   resolution_source String
   closing_date      DateTime
   liquidate_at      DateTime
+  oracle_asset      String?
+  open_price        Decimal?      @default(0)
+  initial_price     String?       
+  final_price       String?       
+  oracle_contract_address String?
+  oracle_decimals   Int?
+  
   category          Category?     @relation(fields: [category_id], references: [id])
   results           Result[]
   transactions      Transaction[]

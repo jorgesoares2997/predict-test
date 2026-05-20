@@ -4,6 +4,7 @@ import React from 'react';
 import { useParams } from 'next/navigation';
 import { useMarket } from '@/hooks/useMarkets';
 import { TradingPanel } from '@/components/Trading/TradingPanel';
+import { ReflectorTradingPanel } from '@/components/Trading/ReflectorTradingPanel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -162,7 +163,11 @@ export default function MarketPage() {
 
         {/* Right Column: Trading Panel */}
         <div className="lg:col-span-1">
-          <TradingPanel market={market} />
+          {market.oracleAsset ? (
+            <ReflectorTradingPanel market={market} openPrice={market.openPrice} />
+          ) : (
+            <TradingPanel market={market} />
+          )}
         </div>
       </div>
     </div>

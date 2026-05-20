@@ -17,7 +17,21 @@ export class OracleUseCase {
       try {
         console.log(`[OracleUseCase] Processing liquidation for market ${market.id}`);
         
-        // Fetch result from source
+        // Se for mercado de Oráculo, o contrato resolve internamente via Reflector
+        if (market.oracle_asset) {
+          await this.marketRepository.updateStatus(market.id, MarketStatus.LOCKED);
+          try {
+            await this.stellarService.settleMarketContract(market.id, 0, market.oracle_asset);
+            await this.marketRepository.updateStatus(market.id, MarketStatus.RESOLVED);
+            console.log(`[OracleUseCase] Successfully liquidated Oracle market ${market.id} for asset ${market.oracle_asset}`);
+          } catch (error) {
+            console.error(`[OracleUseCase] Error liquidating Oracle market ${market.id}, rolling back to ACTIVE:`, error);
+            await this.marketRepository.updateStatus(market.id, MarketStatus.ACTIVE);
+          }
+          continue;
+        }
+
+        // Fluxo para mercados padrão: Fetch result from source
         const winningResultName = await this.oracleService.fetchResultFromSource(market.resolution_source);
         
         if (!winningResultName) {
@@ -28,9 +42,6 @@ export class OracleUseCase {
         // Lock market while settling
         await this.marketRepository.updateStatus(market.id, MarketStatus.LOCKED);
 
-        // Find the matching result ID
-        // Note: the findMarketsToLiquidate doesn't include results in our port definition, 
-        // but we can assume we fetch it here or include it
         const marketDetails = await this.marketRepository.findById(market.id);
         if (!marketDetails) continue;
 

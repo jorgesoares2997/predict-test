@@ -102,7 +102,9 @@ async function start() {
   // Error handling
   server.setErrorHandler((error, request, reply) => {
     if (error instanceof ZodError) {
-      return reply.status(400).send({ error: 'Validation Error', details: (error as any).errors });
+      console.error('[Validation Error] Payload:', request.body);
+      console.error('[Validation Error] Details:', JSON.stringify(error.issues, null, 2));
+      return reply.status(400).send({ error: 'Validation Error', details: error.issues });
     }
     if (error instanceof DomainException) {
       return reply.status(error.statusCode).send({ error: error.message });

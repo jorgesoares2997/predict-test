@@ -41,26 +41,13 @@ export function Navbar() {
             </div>
             <span className="text-xl font-bold tracking-tight">predict.io</span>
           </Link>
-          
+
           <div className="hidden md:flex items-center gap-6 text-sm font-medium">
             <Link href="/" className="hover:text-primary transition-colors">Markets</Link>
             <Link href="/portfolio" className="hover:text-primary transition-colors">Portfolio</Link>
             <Link href="/activity" className="hover:text-primary transition-colors">Activity</Link>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger 
-                render={
-                  <button className="hover:text-primary transition-colors text-sm font-medium">Admin</button>
-                }
-              />
-              <DropdownMenuContent>
-                <DropdownMenuItem 
-                  render={
-                    <Link href="/admin">Admin Console</Link>
-                  }
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Link href="/admin">Admin Console</Link>
+
           </div>
         </div>
 
@@ -105,8 +92,19 @@ export function Navbar() {
               Do you really want to disconnect your wallet and clear the current authenticated session?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
             <Button variant="outline" onClick={() => setLogoutModalOpen(false)}>Cancel</Button>
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                await logout();
+                setLogoutModalOpen(false);
+                setTimeout(() => connect(), 300);
+              }}
+              disabled={isLoading}
+            >
+              Switch Wallet
+            </Button>
             <Button
               variant="destructive"
               onClick={async () => {

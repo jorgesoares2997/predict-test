@@ -26,6 +26,8 @@ export interface Market {
   liquidateAt?: string;
   outcomes: Outcome[];
   resolvedOutcomeId?: string;
+  oracleAsset?: string; // Ex: BTC/USD
+  openPrice?: string;   // Preço de abertura capturado
 }
 
 export interface Outcome {

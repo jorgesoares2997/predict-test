@@ -49,7 +49,7 @@ export class PrismaUserRepository implements IUserRepository {
 export class PrismaMarketRepository implements IMarketRepository {
   constructor(private readonly prisma: PrismaClient) {}
 
-  async create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category' | 'total_locked_value'> & { results: string[] }): Promise<Market & { results: Result[]; category: Category | null }> {
+  async create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category' | 'total_locked_value' | 'open_price'> & { results: string[] }): Promise<Market & { results: Result[]; category: Category | null }> {
     return this.prisma.market.create({
       data: {
         title: data.title,
@@ -60,6 +60,11 @@ export class PrismaMarketRepository implements IMarketRepository {
         liquidate_at: data.liquidate_at,
         status: data.status,
         contract_address: data.contract_address,
+        oracle_asset: (data as any).oracle_asset,
+        initial_price: (data as any).initial_price,
+        final_price: (data as any).final_price,
+        oracle_contract_address: (data as any).oracle_contract_address,
+        oracle_decimals: (data as any).oracle_decimals,
         results: {
           create: data.results.map((name) => ({ name, total_shares: 0, current_price: 0 })),
         },
@@ -111,6 +116,12 @@ export class PrismaMarketRepository implements IMarketRepository {
       closing_date: Date;
       liquidate_at: Date;
       total_locked_value: any;
+      oracle_asset: string | null;
+      open_price: any;
+      initial_price: string | null;
+      final_price: string | null;
+      oracle_contract_address: string | null;
+      oracle_decimals: number | null;
     }>
   ): Promise<Market & { results: Result[]; category: Category | null }> {
     return this.prisma.market.update({

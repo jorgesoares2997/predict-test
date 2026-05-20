@@ -57,6 +57,37 @@ export class TradeController {
     return reply.status(200).send(result);
   };
 
+  prepareClaim = async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = (request as any).user;
+    const { marketId } = request.body as { marketId: string };
+    if (!marketId) {
+      return reply.status(400).send({ error: 'Missing required claim parameters' });
+    }
+    const prepared = await this.tradeUseCase.prepareClaim({
+      userId: user.sub,
+      userPublicKey: user.wallet_address,
+      marketId,
+    });
+    return reply.status(200).send(prepared);
+  };
+
+  executeClaim = async (request: FastifyRequest, reply: FastifyReply) => {
+    const user = (request as any).user;
+    const { signedXDR, transactionId } = request.body as {
+      signedXDR: string;
+      transactionId: string;
+    };
+    if (!signedXDR || !transactionId) {
+      return reply.status(400).send({ error: 'Missing required claim execution parameters' });
+    }
+    const result = await this.tradeUseCase.executeClaim({
+      userId: user.sub,
+      signedXdr: signedXDR,
+      transactionId,
+    });
+    return reply.status(200).send(result);
+  };
+
   createTransaction = async (request: FastifyRequest, reply: FastifyReply) => {
     const data = CreateTransactionDto.parse(request.body);
     const tx = await this.tradeUseCase.createTransaction(data);

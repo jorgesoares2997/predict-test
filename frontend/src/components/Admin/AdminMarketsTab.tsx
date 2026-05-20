@@ -70,7 +70,7 @@ export default function AdminMarketsPage() {
               </Button>
             } 
           />
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Market</DialogTitle>
             </DialogHeader>
@@ -166,7 +166,7 @@ export default function AdminMarketsPage() {
 
       {/* Edit Modal */}
       <Dialog open={!!editingMarket} onOpenChange={(open) => !open && setEditingMarket(null)}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Market</DialogTitle>
           </DialogHeader>

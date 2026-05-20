@@ -15,27 +15,44 @@ export class MarketUseCase {
       title: data.title,
       description: data.description,
       category_id: data.category_id ?? null,
-      resolution_source: data.resolution_source,
+      resolution_source: data.resolution_source ?? (data.oracle_asset ? `Reflector Oracle: ${data.oracle_asset}` : 'Manual Resolution'),
       closing_date: new Date(data.closing_date),
       liquidate_at: new Date(data.liquidate_at),
       status: data.status ?? MarketStatus.ACTIVE,
       contract_address: data.contract_address ?? null,
       results: data.results,
+      oracle_asset: data.oracle_asset ?? null,
+      initial_price: data.initial_price ?? null,
+      final_price: null,
+      oracle_contract_address: data.oracle_contract_address ?? null,
+      oracle_decimals: data.oracle_decimals ?? null,
     });
 
-    await this.stellarService.registerMarketContract({
-      marketId: market.id,
-      outcomesCount: market.results.length,
-      closingDate: market.closing_date,
-      liquidateAt: market.liquidate_at,
-    });
+    try {
+      await this.stellarService.registerMarketContract({
+        marketId: market.id,
+        outcomesCount: market.results.length,
+        closingDate: market.closing_date,
+        liquidateAt: market.liquidate_at,
+        oracleAsset: market.oracle_asset ?? undefined,
+      });
 
-    const contractAddress = process.env.MARKET_CONTRACT_ADDRESS || null;
-    if (contractAddress && market.contract_address !== contractAddress) {
-      return this.marketRepository.update(market.id, { contract_address: contractAddress });
+      const contractAddress = process.env.MARKET_CONTRACT_ADDRESS || null;
+      if (contractAddress && market.contract_address !== contractAddress) {
+        return this.marketRepository.update(market.id, { contract_address: contractAddress });
+      }
+
+      return market;
+    } catch (error: any) {
+      console.error(`[MarketUseCase] Failed to register market on-chain. Rolling back DB...`, error);
+      await this.marketRepository.delete(market.id);
+
+      const errorMsg = String(error?.message || '');
+      if (errorMsg.includes('InvalidAction') || errorMsg.includes('UnreachableCodeReached')) {
+        throw new Error('Falha no Oráculo: O ativo especificado não está registrado no mock local do Reflector. Verifique os ativos disponíveis.');
+      }
+      throw error;
     }
-
-    return market;
   }
 
   async listMarkets(status?: MarketStatus, category?: string) {
@@ -62,6 +79,7 @@ export class MarketUseCase {
       closing_date: Date;
       liquidate_at: Date;
       results: { id?: string; name: string }[];
+      oracle_asset: string | null;
     }>
   ) {
     const existing = await this.marketRepository.findById(id);
@@ -82,6 +100,7 @@ export class MarketUseCase {
       closing_date: Date;
       liquidate_at: Date;
       total_locked_value: any;
+      oracle_asset: string | null;
     }>;
 
     if (Object.keys(payload).length > 0) {

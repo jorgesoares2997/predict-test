@@ -26,6 +26,8 @@ export class MarketController {
       totalShares: String(r.total_shares ?? '0'),
       price: String(r.current_price ?? '0'),
     })),
+    oracleAsset: market.oracle_asset ?? undefined,
+    openPrice: market.open_price ? String(market.open_price) : undefined,
   });
 
   createMarket = async (request: FastifyRequest, reply: FastifyReply) => {

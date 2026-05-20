@@ -63,6 +63,8 @@ export const setupRoutes = (
   app.delete('/api/transactions/:id', auth, tradeController.deleteTransaction);
   app.post('/api/trades/prepare', auth, tradeController.prepareTrade);
   app.post('/api/trades/execute', auth, tradeController.executeTrade);
+  app.post('/api/trades/claim/prepare', auth, tradeController.prepareClaim);
+  app.post('/api/trades/claim/execute', auth, tradeController.executeClaim);
 
   app.post('/api/categories', auth, categoryController.createCategory);
   app.patch('/api/categories/:id', auth, categoryController.updateCategory);

@@ -23,7 +23,7 @@ export type MarketWithDetails = Market & { results: Result[]; category: Category
 export type TransactionWithDetails = Transaction & { market: Market; result: Result };
 
 export interface IMarketRepository {
-  create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category' | 'total_locked_value'> & { results: string[] }): Promise<MarketWithDetails>;
+  create(data: Omit<Market, 'id' | 'results' | 'transactions' | 'category' | 'total_locked_value' | 'open_price'> & { results: string[] }): Promise<MarketWithDetails>;
   findById(id: string): Promise<MarketWithDetails | null>;
   findAll(filters?: { status?: MarketStatus; category?: string }): Promise<MarketWithDetails[]>;
   update(
@@ -38,6 +38,12 @@ export interface IMarketRepository {
       closing_date: Date;
       liquidate_at: Date;
       total_locked_value: any;
+      oracle_asset: string | null;
+      open_price: any;
+      initial_price: string | null;
+      final_price: string | null;
+      oracle_contract_address: string | null;
+      oracle_decimals: number | null;
     }>
   ): Promise<MarketWithDetails>;
   syncResults(marketId: string, results: { id?: string; name: string }[]): Promise<void>;
@@ -89,15 +95,22 @@ export interface IStellarService {
     outcomesCount: number;
     closingDate: Date;
     liquidateAt: Date;
+    oracleAsset?: string;
   }): Promise<void>;
   preparePlaceBetXdr(input: {
     userPublicKey: string;
     marketId: string;
     outcomeIndex: number;
     amountStroops: bigint;
+    oracleAsset?: string;
+  }): Promise<string>;
+  prepareClaimWinningsXdr(input: {
+    userPublicKey: string;
+    marketId: string;
+    oracleAsset?: string;
   }): Promise<string>;
   submitSignedContractTransaction(signedXdr: string): Promise<string>;
-  settleMarketContract(marketId: string, winningOutcomeIndex: number): Promise<void>;
+  settleMarketContract(marketId: string, winningOutcomeIndex: number, oracleAsset?: string): Promise<void>;
   migrateMarketToken(marketId: string, newTokenAddress: string): Promise<void>;
   getTransactionHash(xdr: string): string;
 }

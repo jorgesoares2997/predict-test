@@ -8,6 +8,7 @@ export class StellarService implements IStellarService {
   private sorobanServer: StellarSdk.rpc.Server;
   private networkPassphrase: string;
   private marketContractId: string;
+  private reflectorContractId: string;
   private usdcContractAddress: string;
   private operatorPublicKey: string;
   private operatorSecretKey: string;
@@ -23,6 +24,7 @@ export class StellarService implements IStellarService {
       process.env.MARKET_CONTRACT_ID ||
       process.env.NEXT_PUBLIC_MARKET_CONTRACT_ID ||
       '';
+    this.reflectorContractId = process.env.REFLECTOR_CONTRACT_ID || '';
     this.usdcContractAddress = process.env.USDC_CONTRACT_ADDRESS || '';
     this.operatorPublicKey = process.env.OPERATOR_PUBLIC_KEY || '';
     this.operatorSecretKey = process.env.OPERATOR_SECRET_KEY || '';
@@ -219,16 +221,31 @@ export class StellarService implements IStellarService {
     }
 
     const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
-    const contract = new StellarSdk.Contract(this.marketContractId);
-    const op = contract.call(
-      'create_market',
-      StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
-      new StellarSdk.Address(this.operatorPublicKey).toScVal(),
-      new StellarSdk.Address(this.usdcContractAddress).toScVal(),
-      StellarSdk.nativeToScVal(input.outcomesCount, { type: 'u32' }),
-      StellarSdk.nativeToScVal(Math.floor(input.closingDate.getTime() / 1000), { type: 'u64' }),
-      StellarSdk.nativeToScVal(Math.floor(input.liquidateAt.getTime() / 1000), { type: 'u64' })
-    );
+    let op: StellarSdk.xdr.Operation;
+
+    if ((input as any).oracleAsset) {
+      console.log(`[registerMarketContract] Creating Oracle market for asset: ${(input as any).oracleAsset}`);
+      const durationSeconds = Math.floor((input.liquidateAt.getTime() - Date.now()) / 1000);
+      const reflectorContract = new StellarSdk.Contract(this.reflectorContractId);
+      
+      op = reflectorContract.call(
+        'create_market',
+        StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
+        StellarSdk.nativeToScVal((input as any).oracleAsset, { type: 'symbol' }),
+        StellarSdk.nativeToScVal(Math.max(durationSeconds, 60), { type: 'u64' })
+      );
+    } else {
+      const contract = new StellarSdk.Contract(this.marketContractId);
+      op = contract.call(
+        'create_market',
+        StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
+        new StellarSdk.Address(this.operatorPublicKey).toScVal(),
+        new StellarSdk.Address(this.usdcContractAddress).toScVal(),
+        StellarSdk.nativeToScVal(input.outcomesCount, { type: 'u32' }),
+        StellarSdk.nativeToScVal(Math.floor(input.closingDate.getTime() / 1000), { type: 'u64' }),
+        StellarSdk.nativeToScVal(Math.floor(input.liquidateAt.getTime() / 1000), { type: 'u64' })
+      );
+    }
 
     const tx = new StellarSdk.TransactionBuilder(source, {
       fee: StellarSdk.BASE_FEE,
@@ -261,16 +278,58 @@ export class StellarService implements IStellarService {
     marketId: string;
     outcomeIndex: number;
     amountStroops: bigint;
+    oracleAsset?: string;
   }): Promise<string> {
     this.ensureContractEnv();
     const source = await this.sorobanServer.getAccount(input.userPublicKey);
-    const contract = new StellarSdk.Contract(this.marketContractId);
+    let op: StellarSdk.xdr.Operation;
+    if (input.oracleAsset) {
+      const contract = new StellarSdk.Contract(this.reflectorContractId);
+      // For oracle, outcome is i32 (1 for UP, -1 for DOWN)
+      // TradeUseCase will map outcomeIndex to 1 or -1 and pass it in outcomeIndex
+      op = contract.call(
+        'place_bet',
+        new StellarSdk.Address(input.userPublicKey).toScVal(),
+        StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
+        StellarSdk.nativeToScVal(input.outcomeIndex, { type: 'i32' }),
+        StellarSdk.nativeToScVal(input.amountStroops, { type: 'i128' })
+      );
+    } else {
+      const contract = new StellarSdk.Contract(this.marketContractId);
+      op = contract.call(
+        'place_bet',
+        new StellarSdk.Address(input.userPublicKey).toScVal(),
+        StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
+        StellarSdk.nativeToScVal(input.outcomeIndex, { type: 'u32' }),
+        StellarSdk.nativeToScVal(input.amountStroops, { type: 'i128' })
+      );
+    }
+
+    const tx = new StellarSdk.TransactionBuilder(source, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.networkPassphrase,
+    })
+      .addOperation(op)
+      .setTimeout(60)
+      .build();
+
+    const prepared = await this.sorobanServer.prepareTransaction(tx);
+    return prepared.toXDR();
+  }
+
+  async prepareClaimWinningsXdr(input: {
+    userPublicKey: string;
+    marketId: string;
+    oracleAsset?: string;
+  }): Promise<string> {
+    this.ensureContractEnv();
+    const source = await this.sorobanServer.getAccount(input.userPublicKey);
+    const contract = new StellarSdk.Contract(input.oracleAsset ? this.reflectorContractId : this.marketContractId);
+    
     const op = contract.call(
-      'place_bet',
+      'claim',
       new StellarSdk.Address(input.userPublicKey).toScVal(),
-      StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
-      StellarSdk.nativeToScVal(input.outcomeIndex, { type: 'u32' }),
-      StellarSdk.nativeToScVal(input.amountStroops, { type: 'i128' })
+      StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId))
     );
 
     const tx = new StellarSdk.TransactionBuilder(source, {
@@ -301,7 +360,7 @@ export class StellarService implements IStellarService {
     return submitted.hash;
   }
 
-  async settleMarketContract(marketId: string, winningOutcomeIndex: number): Promise<void> {
+  async settleMarketContract(marketId: string, winningOutcomeIndex: number, oracleAsset?: string): Promise<void> {
     this.ensureContractEnv();
     if (!this.operatorPublicKey || !this.operatorSecretKey) {
       console.warn('[settleMarketContract] missing operator env vars, skipping on-chain settlement');
@@ -309,14 +368,24 @@ export class StellarService implements IStellarService {
     }
 
     const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
-    const contract = new StellarSdk.Contract(this.marketContractId);
-    
-    const op = contract.call(
-      'settle_market',
-      new StellarSdk.Address(this.operatorPublicKey).toScVal(),
-      StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
-      StellarSdk.nativeToScVal(winningOutcomeIndex, { type: 'u32' })
-    );
+    let op: StellarSdk.xdr.Operation;
+
+    if (oracleAsset) {
+      console.log(`[settleMarketContract] Settling Oracle market: ${marketId} (Asset: ${oracleAsset})`);
+      const contract = new StellarSdk.Contract(this.reflectorContractId);
+      op = contract.call(
+        'settle_market',
+        StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId))
+      );
+    } else {
+      const contract = new StellarSdk.Contract(this.marketContractId);
+      op = contract.call(
+        'settle_market',
+        new StellarSdk.Address(this.operatorPublicKey).toScVal(),
+        StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
+        StellarSdk.nativeToScVal(winningOutcomeIndex, { type: 'u32' })
+      );
+    }
 
     const tx = new StellarSdk.TransactionBuilder(source, {
       fee: StellarSdk.BASE_FEE,

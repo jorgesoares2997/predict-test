@@ -1,5 +1,5 @@
 [workspace]
-members = ["contracts/prediction_market"]
+members = ["contracts/prediction_market", "contracts/reflector_mock", "contracts/reflector_prediction_market"]
 exclude = ["contracts/prediction_market/soroban-examples"]
 resolver = "2"
 

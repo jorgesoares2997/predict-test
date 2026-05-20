@@ -74,7 +74,11 @@ export const useAuth = () => {
         status: error?.response?.status,
         data: error?.response?.data,
       });
-      toast.error(error.message || 'Failed to connect wallet');
+      if (error.isAxiosError && error.message === 'Network Error') {
+        toast.error('Não foi possível conectar ao servidor. O backend pode estar offline ou indisponível.');
+      } else {
+        toast.error(error.response?.data?.message || error.message || 'Failed to connect wallet');
+      }
       logout();
     } finally {
       setAuthLoading(false);

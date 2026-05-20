@@ -13,10 +13,14 @@ export const CreateMarketDto = z.object({
   category_id: z.string().uuid().optional(),
   status: z.nativeEnum(MarketStatus).optional(),
   contract_address: z.string().nullable().optional(),
-  resolution_source: z.string().url(),
-  closing_date: z.string().datetime(),
-  liquidate_at: z.string().datetime(),
+  resolution_source: z.string().url().nullable().optional(),
+  closing_date: z.string(),
+  liquidate_at: z.string(),
   results: z.array(z.string()).min(2),
+  oracle_asset: z.string().nullable().optional(),
+  initial_price: z.string().nullable().optional(),
+  oracle_contract_address: z.string().nullable().optional(),
+  oracle_decimals: z.number().int().nullable().optional(),
 });
 
 export const RegisterTradeDto = z.object({
@@ -55,8 +59,8 @@ export const UpdateMarketDto = z.object({
   category_id: z.string().uuid().nullable().optional(),
   contract_address: z.string().nullable().optional(),
   resolution_source: z.string().url().optional(),
-  closing_date: z.string().datetime().optional(),
-  liquidate_at: z.string().datetime().optional(),
+  closing_date: z.string().optional(),
+  liquidate_at: z.string().optional(),
   results: z
     .array(
       z.object({
@@ -66,6 +70,10 @@ export const UpdateMarketDto = z.object({
     )
     .min(2)
     .optional(),
+  oracle_asset: z.string().nullable().optional(),
+  initial_price: z.string().nullable().optional(),
+  oracle_contract_address: z.string().nullable().optional(),
+  oracle_decimals: z.number().int().nullable().optional(),
 });
 
 export const CreateResultDto = z.object({
