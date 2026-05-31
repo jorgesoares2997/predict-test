@@ -22,10 +22,24 @@ export class MarketUseCase {
       contract_address: data.contract_address ?? null,
       results: data.results,
       oracle_asset: data.oracle_asset ?? null,
-      initial_price: data.initial_price ?? null,
+      initial_price: data.oracle_asset
+        ? (await this.stellarService.getOraclePrice(data.oracle_asset)) ?? null
+        : null,
       final_price: null,
       oracle_contract_address: data.oracle_contract_address ?? null,
       oracle_decimals: data.oracle_decimals ?? null,
+      // Convert target_price from plain USD (admin input) to Reflector fixed-point (price × 10^decimals)
+      target_price: (() => {
+        if (!data.target_price) return null;
+        const decimals = data.oracle_decimals ?? 14;
+        try {
+          const usd = parseFloat(data.target_price);
+          return String(BigInt(Math.round(usd * Math.pow(10, decimals))));
+        } catch {
+          return data.target_price; // fallback: store as-is if already fixed-point
+        }
+      })(),
+      condition_operator: data.condition_operator ?? null,
     });
 
     try {
@@ -35,6 +49,11 @@ export class MarketUseCase {
         closingDate: market.closing_date,
         liquidateAt: market.liquidate_at,
         oracleAsset: market.oracle_asset ?? undefined,
+        oracleContractAddress: market.oracle_contract_address ?? undefined,
+        oracleDecimals: market.oracle_decimals ?? undefined,
+        initialPrice: market.initial_price ?? null,
+        targetPrice: market.target_price ?? null,
+        conditionOperator: market.condition_operator ?? null,
       });
 
       const contractAddress = process.env.MARKET_CONTRACT_ADDRESS || null;

@@ -28,6 +28,12 @@ export class MarketController {
     })),
     oracleAsset: market.oracle_asset ?? undefined,
     openPrice: market.open_price ? String(market.open_price) : undefined,
+    initialPrice: market.initial_price ?? undefined,
+    finalPrice: market.final_price ?? undefined,
+    targetPrice: market.target_price ?? undefined,
+    conditionOperator: market.condition_operator ?? undefined,
+    oracleContractAddress: market.oracle_contract_address ?? undefined,
+    oracleDecimals: market.oracle_decimals ?? undefined,
   });
 
   createMarket = async (request: FastifyRequest, reply: FastifyReply) => {

@@ -72,11 +72,12 @@ async function fetchContractUsdcBalance(): Promise<bigint> {
 }
 
 /** Fetch the on-chain total_pool for one market (stored in contract persistent storage) */
-async function fetchMarketOnChainPool(marketId: string): Promise<bigint> {
-  if (!MARKET_CONTRACT_ID) return 0n;
+async function fetchMarketOnChainPool(marketId: string, contractAddress?: string): Promise<bigint> {
+  const targetContractId = contractAddress || MARKET_CONTRACT_ID;
+  if (!targetContractId) return 0n;
 
   const server = new StellarSdk.rpc.Server(SOROBAN_RPC_URL);
-  const contract = new StellarSdk.Contract(MARKET_CONTRACT_ID);
+  const contract = new StellarSdk.Contract(targetContractId);
 
   const dummySource = new StellarSdk.Account(
     'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
@@ -157,11 +158,11 @@ export interface MarketOnChainData {
   onChainPoolUsdc: string;
 }
 
-export function useMarketOnChainPool(marketId: string) {
+export function useMarketOnChainPool(marketId: string, contractAddress?: string) {
   return useQuery<MarketOnChainData>({
-    queryKey: ['market-on-chain-pool', marketId],
+    queryKey: ['market-on-chain-pool', marketId, contractAddress],
     queryFn: async () => {
-      const pool = await fetchMarketOnChainPool(marketId);
+      const pool = await fetchMarketOnChainPool(marketId, contractAddress);
       return {
         marketId,
         onChainPoolStroops: pool,

@@ -65,6 +65,8 @@ export class PrismaMarketRepository implements IMarketRepository {
         final_price: (data as any).final_price,
         oracle_contract_address: (data as any).oracle_contract_address,
         oracle_decimals: (data as any).oracle_decimals,
+        target_price: (data as any).target_price,
+        condition_operator: (data as any).condition_operator,
         results: {
           create: data.results.map((name) => ({ name, total_shares: 0, current_price: 0 })),
         },
@@ -180,10 +182,19 @@ export class PrismaMarketRepository implements IMarketRepository {
     });
   }
 
-  async findMarketsToLiquidate(currentDate: Date): Promise<Market[]> {
+  async findMarketsToClose(currentDate: Date): Promise<Market[]> {
     return this.prisma.market.findMany({
       where: {
         status: MarketStatus.ACTIVE,
+        closing_date: { lte: currentDate },
+      },
+    });
+  }
+
+  async findMarketsToLiquidate(currentDate: Date): Promise<Market[]> {
+    return this.prisma.market.findMany({
+      where: {
+        status: MarketStatus.LOCKED,
         liquidate_at: { lte: currentDate },
       },
     });

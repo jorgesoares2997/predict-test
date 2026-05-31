@@ -50,8 +50,8 @@ type MarketFormPayload = {
   outcomes: OutcomeField[];
   resolutionSource: string;
   oracleAsset?: string;
-  initialPrice?: string;
-  oracleContractAddress?: string;
+  targetPrice?: string;
+  conditionOperator?: string;
   oracleDecimals?: number;
 };
 
@@ -81,9 +81,9 @@ export const useCreateMarket = () => {
         liquidate_at,
         results,
         oracle_asset: newMarket.oracleAsset?.trim() || null,
-        initial_price: newMarket.initialPrice?.trim() || null,
-        oracle_contract_address: newMarket.oracleContractAddress?.trim() || null,
         oracle_decimals: newMarket.oracleDecimals || null,
+        target_price: newMarket.targetPrice?.trim() || null,
+        condition_operator: newMarket.conditionOperator || null,
       };
       const { data } = await apiClient.post('/markets', payload);
       return data;
@@ -124,9 +124,9 @@ export const useUpdateMarket = () => {
         liquidate_at,
         results,
         oracle_asset: updates.oracleAsset?.trim() || null,
-        initial_price: updates.initialPrice?.trim() || null,
-        oracle_contract_address: updates.oracleContractAddress?.trim() || null,
         oracle_decimals: updates.oracleDecimals || null,
+        target_price: updates.targetPrice?.trim() || null,
+        condition_operator: updates.conditionOperator || null,
       };
       const { data } = await apiClient.patch(`/markets/${id}`, payload);
       return data;

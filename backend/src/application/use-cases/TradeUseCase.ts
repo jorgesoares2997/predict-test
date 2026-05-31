@@ -122,26 +122,43 @@ export class TradeUseCase {
         oracleAsset: market.oracle_asset ?? undefined,
       });
     } catch (error: any) {
-      const message = String(error?.message || '');
-      // Contract error #2 = MarketNotFound. Auto-register once for legacy rows created before on-chain hook.
-      if (!message.includes('Error(Contract, #2)')) {
-        throw error;
+      const message = String(error?.message || error || '');
+
+      // Contract error #5 = MarketNotOpen (closed or expired)
+      if (message.includes('Error(Contract, #5)')) {
+        throw new DomainException('This market is no longer accepting predictions.');
       }
 
+      // Contract error #2 = MarketNotFound — auto-register once (handles markets created before on-chain hook)
+      if (!message.includes('Error(Contract, #2)')) {
+        throw new DomainException(`Failed to prepare transaction: ${message}`);
+      }
+
+      // Re-register passing ALL oracle fields
       await this.stellarService.registerMarketContract({
         marketId: market.id,
         outcomesCount: market.results.length,
         closingDate: market.closing_date,
         liquidateAt: market.liquidate_at,
+        oracleAsset: market.oracle_asset ?? undefined,
+        oracleContractAddress: (market as any).oracle_contract_address ?? undefined,
+        oracleDecimals: (market as any).oracle_decimals ?? undefined,
+        initialPrice: (market as any).initial_price ?? null,
+        targetPrice: (market as any).target_price ?? null,
+        conditionOperator: (market as any).condition_operator ?? null,
       });
 
-      xdr = await this.stellarService.preparePlaceBetXdr({
-        userPublicKey: input.userPublicKey,
-        marketId: input.marketId,
-        outcomeIndex: contractOutcomeIndex,
-        amountStroops,
-        oracleAsset: market.oracle_asset ?? undefined,
-      });
+      try {
+        xdr = await this.stellarService.preparePlaceBetXdr({
+          userPublicKey: input.userPublicKey,
+          marketId: input.marketId,
+          outcomeIndex: contractOutcomeIndex,
+          amountStroops,
+          oracleAsset: market.oracle_asset ?? undefined,
+        });
+      } catch (retryError: any) {
+        throw new DomainException(`Failed to prepare transaction after re-registration: ${String(retryError?.message || retryError)}`);
+      }
     }
 
     const expectedHashHex = this.stellarService.getTransactionHash(xdr);
@@ -187,7 +204,13 @@ export class TradeUseCase {
       throw new DomainException('Signed transaction payload does not match the prepared transaction. Tampering detected.');
     }
 
-    const txHash = await this.stellarService.submitSignedContractTransaction(input.signedXdr);
+    let txHash: string;
+    try {
+      txHash = await this.stellarService.submitSignedContractTransaction(input.signedXdr);
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      throw new DomainException(`Transaction submission failed: ${msg}`);
+    }
 
     if (this.kycEnabled && input.userKycStatus !== KycStatus.VERIFIED) {
       throw new DomainException('Only KYC verified users can trade.');
@@ -269,30 +292,48 @@ export class TradeUseCase {
     if (!market) {
       throw new NotFoundException('Market not found');
     }
-    if (market.status !== 'RESOLVED') {
-      throw new DomainException('Market is not settled yet');
+    // Prisma returns uppercase enum strings — compare accordingly
+    if (String(market.status).toUpperCase() !== 'RESOLVED') {
+      throw new DomainException('Market is not resolved yet. Please wait for liquidation.');
     }
 
-    const xdr = await this.stellarService.prepareClaimWinningsXdr({
-      userPublicKey: input.userPublicKey,
-      marketId: input.marketId,
-      oracleAsset: market.oracle_asset ?? undefined,
-    });
+    let xdr: string;
+    try {
+      xdr = await this.stellarService.prepareClaimWinningsXdr({
+        userPublicKey: input.userPublicKey,
+        marketId: input.marketId,
+        oracleAsset: market.oracle_asset ?? undefined,
+        contractAddress: market.contract_address ?? null,
+      });
+    } catch (error: any) {
+      const msg = String(error?.message || error || '');
+      // Contract already settled but user has no position
+      if (msg.includes('Error(Contract, #12)')) throw new DomainException('You have no position in this market.');
+      if (msg.includes('Error(Contract, #11)')) throw new DomainException('You have already claimed your winnings.');
+      if (msg.includes('Error(Contract, #6)'))  throw new DomainException('Market is not settled on-chain yet. Try again in a moment.');
+      throw new DomainException(`Failed to prepare claim: ${msg}`);
+    }
 
     const expectedHashHex = this.stellarService.getTransactionHash(xdr);
 
-    const reservedTransaction = await this.transactionRepository.create({
-      tx_hash: `pending-claim:${expectedHashHex}`,
-      user_id: input.userId,
-      market_id: input.marketId,
-      result_id: market.results[0]?.id || '', // Just a placeholder for claim
-      amount: 0 as any,
-    });
+    // Find any existing pending-claim for this user+market and reuse it
+    const allTxs = await this.transactionRepository.findAll({ user_id: input.userId, market_id: input.marketId });
+    const existingClaim = allTxs.find(tx => tx.tx_hash.startsWith('pending-claim:') || tx.tx_hash.startsWith('claim:'));
+    if (existingClaim?.tx_hash.startsWith('claim:')) {
+      throw new DomainException('You have already claimed your winnings.');
+    }
 
-    return {
-      xdr,
-      transactionId: reservedTransaction.id,
-    };
+    const reservedTransaction = existingClaim
+      ? await this.transactionRepository.update(existingClaim.id, { tx_hash: `pending-claim:${expectedHashHex}` })
+      : await this.transactionRepository.create({
+          tx_hash: `pending-claim:${expectedHashHex}`,
+          user_id: input.userId,
+          market_id: input.marketId,
+          result_id: market.results[0]?.id || '',
+          amount: 0 as any,
+        });
+
+    return { xdr, transactionId: reservedTransaction.id };
   }
 
   async executeClaim(input: {

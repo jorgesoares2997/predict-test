@@ -2,7 +2,10 @@ use soroban_sdk::{
     contract, contractimpl, contractclient, symbol_short, token, Address, BytesN, Env, Symbol,
 };
 use crate::error::MarketError;
-use crate::types::{Asset, Config, DataKey, MarketData, MarketStatus, PriceData};
+use crate::types::{Asset, ConditionOperator, Config, DataKey, MarketData, MarketStatus, PriceData};
+
+// Maximum age in seconds a price feed can be before being considered stale.
+const MAX_ORACLE_AGE_SECS: u64 = 300;
 
 // SEP-40 Oracle Interface
 #[contractclient(name = "OracleClient")]
@@ -33,6 +36,11 @@ impl ReflectorPredictionMarket {
         market_id: BytesN<32>,
         asset: Symbol,
         duration_seconds: u64,
+        oracle_contract: Address,
+        oracle_decimals: u32,
+        initial_price: i128,
+        target_price: i128,
+        condition_operator: ConditionOperator,
     ) -> Result<(), MarketError> {
         let config: Config = env.storage().persistent().get(&DataKey::Config).ok_or(MarketError::NotInitialized)?;
         config.admin.require_auth();
@@ -43,7 +51,7 @@ impl ReflectorPredictionMarket {
         }
 
         // Consulta o preço atual no Oráculo Reflector (SEP-40)
-        let oracle_client = OracleClient::new(&env, &config.oracle);
+        let oracle_client = OracleClient::new(&env, &oracle_contract);
         let asset_struct = Asset {
             type_code: Symbol::new(&env, "crypto"),
             symbol: asset.clone(),
@@ -56,6 +64,11 @@ impl ReflectorPredictionMarket {
         let market = MarketData {
             asset,
             open_price: current_price_data.price,
+            initial_price,
+            target_price,
+            condition_operator,
+            oracle_contract,
+            oracle_decimals,
             start_time,
             end_time,
             status: MarketStatus::Open,
@@ -65,7 +78,7 @@ impl ReflectorPredictionMarket {
         };
 
         env.storage().persistent().set(&market_key, &market);
-        
+
         env.events().publish(
             (symbol_short!("created"), market_id),
             (market.open_price, start_time, end_time),
@@ -134,35 +147,58 @@ impl ReflectorPredictionMarket {
             return Err(MarketError::MarketAlreadySettled);
         }
 
-        if env.ledger().timestamp() < market.end_time {
+        let now = env.ledger().timestamp();
+        if now < market.end_time {
             return Err(MarketError::MarketNotExpired);
         }
 
-        let config: Config = env.storage().persistent().get(&DataKey::Config).ok_or(MarketError::NotInitialized)?;
-        
-        // Consulta o preço histórico DETERMINÍSTICO no Oráculo para o end_time
-        let oracle_client = OracleClient::new(&env, &config.oracle);
+        // Query the oracle: try historical price at end_time first, fall back to lastprice.
+        // Historical price may be unavailable on testnet or for very recent timestamps,
+        // so lastprice is used as a reliable fallback.
+        let oracle_client = OracleClient::new(&env, &market.oracle_contract);
         let asset_struct = Asset {
             type_code: Symbol::new(&env, "crypto"),
             symbol: market.asset.clone(),
         };
-        let close_price_data = oracle_client.price(&asset_struct, &market.end_time).ok_or(MarketError::OracleDataInvalid)?;
+        let close_price_data = oracle_client
+            .price(&asset_struct, &market.end_time)
+            .or_else(|| oracle_client.lastprice(&asset_struct))
+            .ok_or(MarketError::OracleDataInvalid)?;
 
-        // Determinação do vencedor
-        if close_price_data.price > market.open_price {
-            market.winning_outcome = 1;
-        } else if close_price_data.price < market.open_price {
-            market.winning_outcome = -1;
-        } else {
-            market.winning_outcome = 0; // Empate
+        // Staleness check: price must not be older than MAX_ORACLE_AGE_SECS from now
+        if now > close_price_data.timestamp + MAX_ORACLE_AGE_SECS {
+            return Err(MarketError::OracleDataStale);
         }
+
+        // Normalize price to the market's declared decimal precision
+        let close_price = close_price_data.price;
+        let reference_price = if market.target_price != 0 {
+            market.target_price
+        } else {
+            market.initial_price
+        };
+
+        // Evaluate condition: UP (1) means condition is TRUE, DOWN (-1) means FALSE, 0 = draw
+        let condition_met = match market.condition_operator {
+            ConditionOperator::Greater => close_price > reference_price,
+            ConditionOperator::Less => close_price < reference_price,
+            ConditionOperator::Equal => close_price == reference_price,
+        };
+
+        market.winning_outcome = if condition_met {
+            1  // pool_up wins
+        } else if close_price == reference_price {
+            0  // draw (only reachable for Greater/Less when prices are equal)
+        } else {
+            -1 // pool_down wins
+        };
 
         market.status = MarketStatus::Settled;
         env.storage().persistent().set(&market_key, &market);
 
         env.events().publish(
             (symbol_short!("settled"), market_id),
-            (close_price_data.price, market.winning_outcome),
+            (close_price, market.winning_outcome),
         );
 
         Ok(())

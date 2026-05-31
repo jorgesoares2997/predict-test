@@ -9,9 +9,22 @@ pub enum MarketStatus {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ConditionOperator {
+    Greater,
+    Less,
+    Equal,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarketData {
     pub asset: Symbol,
     pub open_price: i128,
+    pub initial_price: i128,
+    pub target_price: i128,
+    pub condition_operator: ConditionOperator,
+    pub oracle_contract: Address,
+    pub oracle_decimals: u32,
     pub start_time: u64,
     pub end_time: u64,
     pub status: MarketStatus,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { KycStatus, MarketStatus } from '@prisma/client';
+import { ConditionOperator, KycStatus, MarketStatus } from '@prisma/client';
 
 export const AuthLoginDto = z.object({
   wallet_address: z.string(),
@@ -18,9 +18,10 @@ export const CreateMarketDto = z.object({
   liquidate_at: z.string(),
   results: z.array(z.string()).min(2),
   oracle_asset: z.string().nullable().optional(),
-  initial_price: z.string().nullable().optional(),
   oracle_contract_address: z.string().nullable().optional(),
   oracle_decimals: z.number().int().nullable().optional(),
+  target_price: z.string().nullable().optional(),
+  condition_operator: z.nativeEnum(ConditionOperator).nullable().optional(),
 });
 
 export const RegisterTradeDto = z.object({
@@ -74,6 +75,8 @@ export const UpdateMarketDto = z.object({
   initial_price: z.string().nullable().optional(),
   oracle_contract_address: z.string().nullable().optional(),
   oracle_decimals: z.number().int().nullable().optional(),
+  target_price: z.string().nullable().optional(),
+  condition_operator: z.nativeEnum(ConditionOperator).nullable().optional(),
 });
 
 export const CreateResultDto = z.object({

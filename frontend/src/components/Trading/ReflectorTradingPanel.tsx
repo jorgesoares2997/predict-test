@@ -15,7 +15,23 @@ import { useQuery } from '@tanstack/react-query';
 
 interface ReflectorTradingPanelProps {
   market: Market;
-  openPrice?: string; // Preço de abertura capturado pelo contrato
+  openPrice?: string;
+}
+
+const CONDITION_LABEL: Record<string, string> = {
+  GREATER_THAN: 'maior que (>)',
+  LESS_THAN: 'menor que (<)',
+  EQUAL: 'igual a (=)',
+};
+
+function formatOraclePrice(raw?: string, decimals = 14): string {
+  if (!raw) return '—';
+  try {
+    const usd = Number(BigInt(raw)) / Math.pow(10, decimals);
+    return `$${usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  } catch {
+    return raw;
+  }
 }
 
 export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPanelProps) {
@@ -43,7 +59,7 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
   const existingPrediction = userTransactions?.find((tx) => !tx.tx_hash.startsWith('pending:'));
   const selectedPredictionName = market.outcomes.find((o) => o.id === existingPrediction?.result_id)?.name ?? existingPrediction?.result_id;
   
-  const isSettled = market.status === 'resolved' || market.status === 'settled';
+  const isSettled = market.status === 'resolved' || (market.status as string) === 'settled';
 
   const handleTrade = async () => {
     if (!selectedOutcomeId) {
@@ -106,12 +122,39 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
         </CardHeader>
         
         <CardContent className="space-y-6">
-          {openPrice && (
-            <div className="bg-muted/50 rounded-lg p-3 flex items-center justify-between border border-border/50">
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Info className="h-3 w-3" /> Preço de Abertura:
-              </span>
-              <span className="font-mono font-bold text-primary">{openPrice} USDC</span>
+          {/* Oracle resolution info panel */}
+          {(market.initialPrice || market.targetPrice || market.finalPrice) && (
+            <div className="bg-muted/50 rounded-lg p-3 space-y-2 border border-border/50 text-xs">
+              <p className="font-semibold text-muted-foreground flex items-center gap-1 uppercase tracking-widest text-[10px]">
+                <Info className="h-3 w-3" /> Condição de Resolução
+              </p>
+              <div className="space-y-1">
+                {market.initialPrice && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Preço inicial ({market.oracleAsset})</span>
+                    <span className="font-mono font-bold">{formatOraclePrice(market.initialPrice, market.oracleDecimals)}</span>
+                  </div>
+                )}
+                {market.targetPrice && market.conditionOperator && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">
+                      Preço alvo ({CONDITION_LABEL[market.conditionOperator]})
+                    </span>
+                    <span className="font-mono font-bold text-primary">{formatOraclePrice(market.targetPrice, market.oracleDecimals)}</span>
+                  </div>
+                )}
+                {market.finalPrice && (
+                  <div className="flex justify-between border-t border-border/50 pt-1 mt-1">
+                    <span className="text-muted-foreground">Preço final (liquidação)</span>
+                    <span className="font-mono font-bold text-green-500">{formatOraclePrice(market.finalPrice, market.oracleDecimals)}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {market.conditionOperator && market.targetPrice
+                  ? `"Sim" vence se o preço for ${CONDITION_LABEL[market.conditionOperator]} ${formatOraclePrice(market.targetPrice, market.oracleDecimals)} na liquidação.`
+                  : 'Resolução via Oráculo Reflector (SEP-40).'}
+              </p>
             </div>
           )}
 

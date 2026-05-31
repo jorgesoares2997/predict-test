@@ -44,11 +44,14 @@ export interface IMarketRepository {
       final_price: string | null;
       oracle_contract_address: string | null;
       oracle_decimals: number | null;
+      target_price: string | null;
+      condition_operator: string | null;
     }>
   ): Promise<MarketWithDetails>;
   syncResults(marketId: string, results: { id?: string; name: string }[]): Promise<void>;
   delete(id: string): Promise<Market>;
   updateStatus(id: string, status: MarketStatus): Promise<Market>;
+  findMarketsToClose(currentDate: Date): Promise<Market[]>;
   findMarketsToLiquidate(currentDate: Date): Promise<Market[]>;
 }
 
@@ -96,6 +99,11 @@ export interface IStellarService {
     closingDate: Date;
     liquidateAt: Date;
     oracleAsset?: string;
+    oracleContractAddress?: string;
+    oracleDecimals?: number;
+    initialPrice?: string | null;
+    targetPrice?: string | null;
+    conditionOperator?: string | null;
   }): Promise<void>;
   preparePlaceBetXdr(input: {
     userPublicKey: string;
@@ -108,11 +116,13 @@ export interface IStellarService {
     userPublicKey: string;
     marketId: string;
     oracleAsset?: string;
+    contractAddress?: string | null;
   }): Promise<string>;
   submitSignedContractTransaction(signedXdr: string): Promise<string>;
-  settleMarketContract(marketId: string, winningOutcomeIndex: number, oracleAsset?: string): Promise<void>;
+  settleMarketContract(marketId: string, winningOutcomeIndex: number, oracleAsset?: string, contractAddress?: string | null): Promise<void>;
   migrateMarketToken(marketId: string, newTokenAddress: string): Promise<void>;
   getTransactionHash(xdr: string): string;
+  getOraclePrice(asset: string): Promise<string | null>;
 }
 
 export interface IOracleService {

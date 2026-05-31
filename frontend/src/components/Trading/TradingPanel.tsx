@@ -35,7 +35,7 @@ export function TradingPanel({ market }: { market: Market }) {
   const existingPrediction = userTransactions?.find((tx) => !tx.tx_hash.startsWith('pending:'));
   const selectedPredictionName = market.outcomes.find((o) => o.id === existingPrediction?.result_id)?.name ?? existingPrediction?.result_id;
   
-  const isSettled = market.status === 'resolved' || market.status === 'settled';
+  const isSettled = market.status === 'resolved' || (market.status as string) === 'settled';
   const isWinner = isSettled && existingPrediction && existingPrediction.result_id === market.resolvedOutcomeId;
 
   const handleTrade = async () => {

@@ -42,7 +42,7 @@ export const useClaimWinnings = () => {
       return result;
     } catch (error: any) {
       console.error('Claim error:', error);
-      toast.error(error.response?.data?.message || 'Failed to claim winnings');
+      const msg = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to claim winnings'; toast.error(msg);
     } finally {
       setIsProcessing(false);
     }

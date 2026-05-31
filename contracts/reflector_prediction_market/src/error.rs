@@ -16,4 +16,5 @@ pub enum MarketError {
     NotAuthorized = 10,
     AlreadyClaimed = 11,
     NoPosition = 12,
+    OracleDataStale = 13,
 }

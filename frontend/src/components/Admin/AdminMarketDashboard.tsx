@@ -91,7 +91,7 @@ function StatCard({
 // ─── Market Row (with live on-chain pool) ─────────────────────────────────────
 
 function MarketDashboardRow({ market, index }: { market: Market; index: number }) {
-  const { data: onChain, isLoading: poolLoading } = useMarketOnChainPool(market.id);
+  const { data: onChain, isLoading: poolLoading } = useMarketOnChainPool(market.id, market.contractAddress || undefined);
 
   const dbValue = Number(market.totalLockedValue ?? 0);
   const onChainValue = onChain ? Number(onChain.onChainPoolUsdc) : null;

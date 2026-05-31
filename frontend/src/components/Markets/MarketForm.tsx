@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { Market } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -14,11 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Trash2 } from 'lucide-react';
-
+import { Plus, Trash2, Clock, Calendar, TrendingUp, Loader2 } from 'lucide-react';
 import { useCategories } from '@/hooks/useCategories';
 
 type OutcomeFormRow = { id?: string; name: string };
+type ConditionOperator = 'GREATER_THAN' | 'LESS_THAN' | 'EQUAL';
+type DateMode = 'counter' | 'calendar';
 
 type MarketFormValues = {
   id?: string;
@@ -33,9 +33,39 @@ type MarketFormValues = {
   outcomes: OutcomeFormRow[];
   marketType: 'standard' | 'oracle';
   oracleAsset?: string;
-  initialPrice?: string;
-  oracleContractAddress?: string;
+  targetPrice?: string;
+  conditionOperator?: ConditionOperator;
   oracleDecimals?: number;
+};
+
+// Offset presets in minutes
+const COUNTER_PRESETS = [
+  { label: '+5 min',  minutes: 5 },
+  { label: '+10 min', minutes: 10 },
+  { label: '+1 h',   minutes: 60 },
+  { label: '+4 h',   minutes: 240 },
+  { label: '+1 day', minutes: 1440 },
+];
+
+// CoinGecko symbol → coin ID map
+const COINGECKO_IDS: Record<string, string> = {
+  BTC:   'bitcoin',
+  ETH:   'ethereum',
+  SOL:   'solana',
+  XLM:   'stellar',
+  BNB:   'binancecoin',
+  ADA:   'cardano',
+  DOT:   'polkadot',
+  AVAX:  'avalanche-2',
+  MATIC: 'matic-network',
+  LINK:  'chainlink',
+  UNI:   'uniswap',
+  ATOM:  'cosmos',
+  LTC:   'litecoin',
+  XRP:   'ripple',
+  DOGE:  'dogecoin',
+  USDC:  'usd-coin',
+  USDT:  'tether',
 };
 
 function toDatetimeLocal(value?: string): string {
@@ -43,15 +73,16 @@ function toDatetimeLocal(value?: string): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function addMinutes(base: Date, minutes: number): string {
+  return toDatetimeLocal(new Date(base.getTime() + minutes * 60_000).toISOString());
 }
 
 function buildDefaultValues(initialData?: Market): MarketFormValues {
   if (!initialData) {
     const now = new Date();
-    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
     return {
       title: '',
       description: 'Market created via Admin UI',
@@ -59,12 +90,13 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
       categoryId: '',
       status: 'active',
       contractAddress: '',
-      closingDate: toDatetimeLocal(in24h.toISOString()),
-      liquidateAt: toDatetimeLocal(in24h.toISOString()),
+      closingDate: addMinutes(now, 5),
+      liquidateAt: addMinutes(now, 6),
       outcomes: [{ name: 'Sim' }, { name: 'Não' }],
       marketType: 'standard',
-      oracleContractAddress: process.env.NEXT_PUBLIC_REFLECTOR_CONTRACT_ID || '',
       oracleDecimals: 14,
+      targetPrice: '',
+      conditionOperator: 'GREATER_THAN',
     };
   }
 
@@ -84,8 +116,8 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
         : [{ name: 'Sim' }, { name: 'Não' }],
     marketType: initialData.oracleAsset ? 'oracle' : 'standard',
     oracleAsset: initialData.oracleAsset ?? '',
-    initialPrice: (initialData as any).initialPrice ?? '',
-    oracleContractAddress: (initialData as any).oracleContractAddress ?? process.env.NEXT_PUBLIC_REFLECTOR_CONTRACT_ID ?? '',
+    targetPrice: (initialData as any).targetPrice ?? '',
+    conditionOperator: (initialData as any).conditionOperator ?? 'GREATER_THAN',
     oracleDecimals: (initialData as any).oracleDecimals ?? 14,
   };
 }
@@ -98,6 +130,7 @@ interface MarketFormProps {
 
 export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps) {
   const { data: categories } = useCategories();
+
   const {
     register,
     handleSubmit,
@@ -105,57 +138,110 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
     watch,
     reset,
     formState: { errors },
-  } = useForm<MarketFormValues>({
-    defaultValues: buildDefaultValues(initialData),
-  });
+  } = useForm<MarketFormValues>({ defaultValues: buildDefaultValues(initialData) });
 
-  useEffect(() => {
-    reset(buildDefaultValues(initialData));
-  }, [initialData, reset]);
+  useEffect(() => { reset(buildDefaultValues(initialData)); }, [initialData, reset]);
 
-  const outcomes = watch('outcomes');
+  // Local UI state
+  const [dateMode, setDateMode] = useState<DateMode>('counter');
+  const [selectedPreset, setSelectedPreset] = useState<number>(5); // minutes
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [priceFetching, setPriceFetching] = useState(false);
+
+  const outcomes        = watch('outcomes');
   const selectedCategoryId = watch('categoryId');
-  const status = watch('status');
-  const marketType = watch('marketType');
+  const status          = watch('status');
+  const marketType      = watch('marketType');
+  const conditionOperator = watch('conditionOperator');
+  const oracleAsset     = watch('oracleAsset');
 
-  // Lógica automática: Categoria "Cripto" ativa o modo Oracle
+  // Auto-set oracle mode when Cripto category selected
   useEffect(() => {
-    const selectedCategory = categories?.find(c => c.id === selectedCategoryId);
-    if (selectedCategory?.name.toLowerCase() === 'cripto') {
-      setValue('marketType', 'oracle');
-    }
+    const cat = categories?.find(c => c.id === selectedCategoryId);
+    if (cat?.name.toLowerCase() === 'cripto') setValue('marketType', 'oracle');
   }, [selectedCategoryId, categories, setValue]);
 
-  // Ao trocar para Oracle, forçamos os outcomes e o contrato padrão
+  // Reset outcomes to Sim/Não in oracle mode
   useEffect(() => {
-    if (marketType === 'oracle') {
-      setValue('outcomes', [{ name: 'Sim' }, { name: 'Não' }]);
-      setValue('contractAddress', process.env.NEXT_PUBLIC_REFLECTOR_CONTRACT_ID || '');
-    }
+    if (marketType === 'oracle') setValue('outcomes', [{ name: 'Sim' }, { name: 'Não' }]);
   }, [marketType, setValue]);
 
-  const addOutcome = () => {
-    setValue('outcomes', [...outcomes, { name: '' }]);
+  // Fetch live price when oracleAsset changes
+  const fetchLivePrice = useCallback(async (asset: string) => {
+    const coinId = COINGECKO_IDS[asset.toUpperCase()];
+    if (!coinId) { setLivePrice(null); return; }
+    setPriceFetching(true);
+    try {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
+      );
+      const data = await res.json();
+      const price = data[coinId]?.usd ?? null;
+      setLivePrice(price);
+      // Auto-fill target price with current price if empty
+      if (price !== null) {
+        setValue('targetPrice', String(price));
+      }
+    } catch {
+      setLivePrice(null);
+    } finally {
+      setPriceFetching(false);
+    }
+  }, [setValue]);
+
+  useEffect(() => {
+    if (marketType === 'oracle' && oracleAsset && oracleAsset.length >= 2) {
+      const timer = setTimeout(() => fetchLivePrice(oracleAsset), 500);
+      return () => clearTimeout(timer);
+    } else {
+      setLivePrice(null);
+    }
+  }, [oracleAsset, marketType, fetchLivePrice]);
+
+  // Apply counter preset — closing = now + preset, liquidate = closing + 1 min
+  const applyPreset = useCallback((minutes: number) => {
+    setSelectedPreset(minutes);
+    const now = new Date();
+    const closing = addMinutes(now, minutes);
+    const liquidate = addMinutes(now, minutes + 1);
+    setValue('closingDate', closing);
+    setValue('liquidateAt', liquidate);
+  }, [setValue]);
+
+  // Whenever closing date changes in calendar mode, auto-set liquidate = closing + 1 min
+  const handleClosingDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setValue('closingDate', val);
+    if (val) {
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) setValue('liquidateAt', addMinutes(d, 1));
+    }
   };
 
-  const removeOutcome = (index: number) => {
-    setValue('outcomes', outcomes.filter((_, i) => i !== index));
-  };
+  // Initialize counter preset on mount
+  useEffect(() => {
+    if (!initialData && dateMode === 'counter') applyPreset(5);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const addOutcome    = () => setValue('outcomes', [...outcomes, { name: '' }]);
+  const removeOutcome = (i: number) => setValue('outcomes', outcomes.filter((_, idx) => idx !== i));
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {initialData?.id && (
         <div className="space-y-2">
-          <Label htmlFor="marketId">Market ID</Label>
-          <Input id="marketId" value={initialData.id} readOnly className="font-mono text-xs" />
+          <Label>Market ID</Label>
+          <Input value={initialData.id} readOnly className="font-mono text-xs" />
         </div>
       )}
 
+      {/* Title */}
       <div className="space-y-2">
         <Label htmlFor="title">Market Title</Label>
         <Input
           id="title"
-          placeholder="Will Bitcoin reach $100k by 2025?"
+          placeholder="Will Bitcoin reach $100k by end of month?"
           {...register('title', {
             required: 'Title is required',
             minLength: { value: 5, message: 'Title must be at least 5 characters' },
@@ -166,12 +252,12 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
 
       <input type="hidden" {...register('description', { required: true })} />
 
-
+      {/* Market type + oracle fields */}
       <div className="grid grid-cols-2 gap-4 border-y py-4 bg-muted/20 px-4 -mx-4">
         <div className="space-y-2">
-          <Label htmlFor="marketType">Market Type</Label>
+          <Label>Market Type</Label>
           <input type="hidden" {...register('marketType', { required: true })} />
-          <Select value={marketType} onValueChange={(value) => setValue('marketType', value as 'standard' | 'oracle')}>
+          <Select value={marketType} onValueChange={(v) => setValue('marketType', v as 'standard' | 'oracle')}>
             <SelectTrigger className="w-full bg-background">
               <SelectValue placeholder="Select type" />
             </SelectTrigger>
@@ -184,61 +270,91 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
 
         {marketType === 'oracle' && (
           <div className="col-span-2 space-y-4">
+
+            {/* Asset input + live price badge */}
             <div className="space-y-2">
-              <Label htmlFor="oracleAsset">Oracle Asset (Reflector Symbol)</Label>
-              <Input
-                id="oracleAsset"
-                placeholder="Ex: BTC, ETH, SOL"
-                {...register('oracleAsset', { required: marketType === 'oracle' })}
-                className="bg-background font-bold"
-              />
+              <Label htmlFor="oracleAsset">Asset</Label>
+              <div className="relative">
+                <Input
+                  id="oracleAsset"
+                  placeholder="BTC, ETH, SOL…"
+                  {...register('oracleAsset', { required: marketType === 'oracle' })}
+                  className="bg-background font-bold uppercase pr-32"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                  {priceFetching ? (
+                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" /> fetching…
+                    </span>
+                  ) : livePrice !== null ? (
+                    <span className="flex items-center gap-1 rounded-full bg-green-500/10 border border-green-500/30 px-2 py-0.5 text-xs font-bold text-green-500">
+                      <TrendingUp className="h-3 w-3" />
+                      ${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             </div>
-            
+
+            <input type="hidden" {...register('oracleDecimals', { valueAsNumber: true })} />
+
+            {/* Target price + condition */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="oracleDecimals">Decimals</Label>
+                <Label htmlFor="targetPrice">
+                  Target Price (USD)
+                  {livePrice !== null && (
+                    <span className="ml-2 text-[10px] text-muted-foreground font-normal">
+                      current: ${livePrice.toLocaleString()}
+                    </span>
+                  )}
+                </Label>
                 <Input
-                  id="oracleDecimals"
-                  type="number"
-                  placeholder="14"
-                  {...register('oracleDecimals', { valueAsNumber: true })}
+                  id="targetPrice"
+                  placeholder={livePrice ? String(livePrice) : 'e.g. 73000'}
+                  {...register('targetPrice')}
                   className="bg-background"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="oracleContractAddress">Contract Address</Label>
-                <Input
-                  id="oracleContractAddress"
-                  placeholder="Contract ID (C...)"
-                  {...register('oracleContractAddress')}
-                  className="bg-background font-mono text-xs"
-                />
+                <Label>Condition</Label>
+                <input type="hidden" {...register('conditionOperator')} />
+                <Select
+                  value={conditionOperator}
+                  onValueChange={(v) => setValue('conditionOperator', v as ConditionOperator)}
+                >
+                  <SelectTrigger className="w-full bg-background">
+                    <SelectValue placeholder="Select condition" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GREATER_THAN">Greater than (&gt;)</SelectItem>
+                    <SelectItem value="LESS_THAN">Less than (&lt;)</SelectItem>
+                    <SelectItem value="EQUAL">Equal to (=)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
           </div>
         )}
       </div>
 
+      {/* Category + Status */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="categoryId">Category</Label>
+          <Label>Category</Label>
           <input type="hidden" {...register('categoryId', { required: 'Category is required' })} />
-          <Select
-            value={selectedCategoryId || null}
-            onValueChange={(value) => setValue('categoryId', value ?? '')}
-          >
+          <Select value={selectedCategoryId || undefined} onValueChange={(v) => setValue('categoryId', v ?? '')}>
             <SelectTrigger className="w-full">
               <span className="truncate">
-                {selectedCategoryId 
-                  ? categories?.find((c) => c.id === selectedCategoryId)?.name || selectedCategoryId 
-                  : "Select a category"}
+                {selectedCategoryId
+                  ? categories?.find(c => c.id === selectedCategoryId)?.name || selectedCategoryId
+                  : 'Select a category'}
               </span>
             </SelectTrigger>
             <SelectContent>
-              {categories?.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
+              {categories?.map(cat => (
+                <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -246,9 +362,9 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="status">Status</Label>
+          <Label>Status</Label>
           <input type="hidden" {...register('status', { required: true })} />
-          <Select value={status} onValueChange={(value) => setValue('status', value as MarketFormValues['status'])}>
+          <Select value={status} onValueChange={(v) => setValue('status', v as MarketFormValues['status'])}>
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select status" />
             </SelectTrigger>
@@ -261,29 +377,110 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="closingDate">Closing Date</Label>
-          <Input
-            id="closingDate"
-            type="datetime-local"
-            {...register('closingDate', { required: 'Closing date is required' })}
-          />
-          {errors.closingDate && <p className="text-xs text-destructive">{errors.closingDate.message}</p>}
+      {/* Closing date — counter or calendar */}
+      <div className="space-y-3 rounded-lg border p-4 bg-muted/10">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-semibold">Market Duration</Label>
+          {/* Mode toggle */}
+          <div className="flex rounded-md border overflow-hidden text-xs">
+            <button
+              type="button"
+              onClick={() => { setDateMode('counter'); applyPreset(selectedPreset); }}
+              className={`flex items-center gap-1 px-3 py-1.5 transition-colors ${
+                dateMode === 'counter'
+                  ? 'bg-primary text-primary-foreground font-semibold'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Clock className="h-3 w-3" /> Quick
+            </button>
+            <button
+              type="button"
+              onClick={() => setDateMode('calendar')}
+              className={`flex items-center gap-1 px-3 py-1.5 transition-colors ${
+                dateMode === 'calendar'
+                  ? 'bg-primary text-primary-foreground font-semibold'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <Calendar className="h-3 w-3" /> Custom
+            </button>
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="liquidateAt">Liquidate At</Label>
-          <Input
-            id="liquidateAt"
-            type="datetime-local"
-            {...register('liquidateAt', { required: 'Liquidation date is required' })}
-          />
-          {errors.liquidateAt && <p className="text-xs text-destructive">{errors.liquidateAt.message}</p>}
-        </div>
+        {dateMode === 'counter' ? (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Market closes in… (liquidation auto-set to 1 min after close)
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {COUNTER_PRESETS.map(({ label, minutes }) => (
+                <button
+                  key={minutes}
+                  type="button"
+                  onClick={() => applyPreset(minutes)}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition-all ${
+                    selectedPreset === minutes
+                      ? 'bg-primary text-primary-foreground border-primary shadow-md shadow-primary/20'
+                      : 'bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {/* Show computed values as read-only */}
+            <div className="grid grid-cols-2 gap-3 mt-1">
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Closes at</p>
+                <Input
+                  readOnly
+                  value={watch('closingDate')}
+                  className="bg-muted text-xs font-mono cursor-default"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Liquidates at</p>
+                <Input
+                  readOnly
+                  value={watch('liquidateAt')}
+                  className="bg-muted text-xs font-mono cursor-default"
+                />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="closingDate">Closing Date</Label>
+              <Input
+                id="closingDate"
+                type="datetime-local"
+                value={watch('closingDate')}
+                onChange={handleClosingDateChange}
+              />
+              {errors.closingDate && <p className="text-xs text-destructive">{errors.closingDate.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="liquidateAt">
+                Liquidate At
+                <span className="ml-1 text-[10px] text-muted-foreground font-normal">(auto: close + 1 min)</span>
+              </Label>
+              <Input
+                id="liquidateAt"
+                type="datetime-local"
+                {...register('liquidateAt', { required: 'Liquidation date is required' })}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Hidden fields always registered */}
+        <input type="hidden" {...register('closingDate',  { required: 'Closing date is required' })} />
+        <input type="hidden" {...register('liquidateAt',  { required: 'Liquidation date is required' })} />
       </div>
 
-
+      {/* Outcomes */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Label>Outcomes</Label>
@@ -293,26 +490,17 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
             </Button>
           )}
         </div>
-
         <div className="space-y-3">
           {outcomes.map((outcome, index) => (
             <div key={`${outcome.id ?? 'new'}-${index}`} className="flex gap-2">
               <Input
                 placeholder={`Outcome ${index + 1}`}
-                {...register(`outcomes.${index}.name` as const, {
-                  required: 'Outcome name is required',
-                })}
+                {...register(`outcomes.${index}.name` as const, { required: 'Outcome name is required' })}
                 readOnly={marketType === 'oracle'}
                 className={marketType === 'oracle' ? 'bg-muted font-semibold' : ''}
               />
               {outcomes.length > 2 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeOutcome(index)}
-                  className="text-destructive"
-                >
+                <Button type="button" variant="ghost" size="icon" onClick={() => removeOutcome(index)} className="text-destructive">
                   <Trash2 className="h-4 w-4" />
                 </Button>
               )}

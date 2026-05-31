@@ -55,7 +55,7 @@ export const useExecuteTrade = () => {
       return result;
     } catch (error: any) {
       console.error('Trade error:', error);
-      toast.error(error.response?.data?.message || 'Failed to execute trade');
+      const msg = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to execute trade'; toast.error(msg);
     } finally {
       setIsProcessing(false);
     }

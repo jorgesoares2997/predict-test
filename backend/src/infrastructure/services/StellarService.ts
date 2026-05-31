@@ -226,13 +226,36 @@ export class StellarService implements IStellarService {
     if ((input as any).oracleAsset) {
       console.log(`[registerMarketContract] Creating Oracle market for asset: ${(input as any).oracleAsset}`);
       const durationSeconds = Math.floor((input.liquidateAt.getTime() - Date.now()) / 1000);
-      const reflectorContract = new StellarSdk.Contract(this.reflectorContractId);
+      const oracleMockId = (input as any).oracleContractAddress || process.env.ORACLE_MOCK_CONTRACT_ID || '';
+      if (!oracleMockId) {
+        throw new Error('Missing ORACLE_MOCK_CONTRACT_ID in environment variables');
+      }
       
-      op = reflectorContract.call(
+      // Oracle market create_market is on our deployed market contract, not the Reflector oracle
+      const marketContract = new StellarSdk.Contract(this.marketContractId);
+
+      const conditionOperatorScVal = (() => {
+        const raw = ((input as any).conditionOperator as string) || 'GREATER_THAN';
+        const variantMap: Record<string, string> = {
+          GREATER_THAN: 'Greater',
+          LESS_THAN: 'Less',
+          EQUAL: 'Equal',
+        };
+        const variant = variantMap[raw] ?? 'Greater';
+        // Soroban #[contracttype] unit enum variant → ScvVec([ScvSymbol("Variant")])
+        return StellarSdk.xdr.ScVal.scvVec([StellarSdk.xdr.ScVal.scvSymbol(variant)]);
+      })();
+
+      op = marketContract.call(
         'create_market',
         StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
         StellarSdk.nativeToScVal((input as any).oracleAsset, { type: 'symbol' }),
-        StellarSdk.nativeToScVal(Math.max(durationSeconds, 60), { type: 'u64' })
+        StellarSdk.nativeToScVal(Math.max(durationSeconds, 60), { type: 'u64' }),
+        new StellarSdk.Address(oracleMockId).toScVal(),
+        StellarSdk.nativeToScVal((input as any).oracleDecimals ?? 14, { type: 'u32' }),
+        StellarSdk.nativeToScVal(BigInt((input as any).initialPrice ?? '0'), { type: 'i128' }),
+        StellarSdk.nativeToScVal(BigInt((input as any).targetPrice ?? '0'), { type: 'i128' }),
+        conditionOperatorScVal
       );
     } else {
       const contract = new StellarSdk.Contract(this.marketContractId);
@@ -284,9 +307,9 @@ export class StellarService implements IStellarService {
     const source = await this.sorobanServer.getAccount(input.userPublicKey);
     let op: StellarSdk.xdr.Operation;
     if (input.oracleAsset) {
-      const contract = new StellarSdk.Contract(this.reflectorContractId);
-      // For oracle, outcome is i32 (1 for UP, -1 for DOWN)
-      // TradeUseCase will map outcomeIndex to 1 or -1 and pass it in outcomeIndex
+      // Oracle markets use our deployed market contract (reflector_prediction_market)
+      // outcome: 1 = UP (Sim / condition met), -1 = DOWN (Não / condition not met)
+      const contract = new StellarSdk.Contract(this.marketContractId);
       op = contract.call(
         'place_bet',
         new StellarSdk.Address(input.userPublicKey).toScVal(),
@@ -321,10 +344,13 @@ export class StellarService implements IStellarService {
     userPublicKey: string;
     marketId: string;
     oracleAsset?: string;
+    contractAddress?: string | null;
   }): Promise<string> {
     this.ensureContractEnv();
     const source = await this.sorobanServer.getAccount(input.userPublicKey);
-    const contract = new StellarSdk.Contract(input.oracleAsset ? this.reflectorContractId : this.marketContractId);
+    // Use the contract address stored on the market record (survives redeployments)
+    const contractId = input.contractAddress || this.marketContractId;
+    const contract = new StellarSdk.Contract(contractId);
     
     const op = contract.call(
       'claim',
@@ -360,7 +386,7 @@ export class StellarService implements IStellarService {
     return submitted.hash;
   }
 
-  async settleMarketContract(marketId: string, winningOutcomeIndex: number, oracleAsset?: string): Promise<void> {
+  async settleMarketContract(marketId: string, winningOutcomeIndex: number, oracleAsset?: string, contractAddress?: string | null): Promise<void> {
     this.ensureContractEnv();
     if (!this.operatorPublicKey || !this.operatorSecretKey) {
       console.warn('[settleMarketContract] missing operator env vars, skipping on-chain settlement');
@@ -370,15 +396,19 @@ export class StellarService implements IStellarService {
     const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
     let op: StellarSdk.xdr.Operation;
 
+    // Always use the contract address stored on the market (survives redeployments)
+    const contractId = contractAddress || this.marketContractId;
+
     if (oracleAsset) {
-      console.log(`[settleMarketContract] Settling Oracle market: ${marketId} (Asset: ${oracleAsset})`);
-      const contract = new StellarSdk.Contract(this.reflectorContractId);
+      // settle_market on our contract calls the Reflector oracle internally to get the price
+      console.log(`[settleMarketContract] Settling Oracle market: ${marketId} (Asset: ${oracleAsset}) on ${contractId}`);
+      const contract = new StellarSdk.Contract(contractId);
       op = contract.call(
         'settle_market',
         StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId))
       );
     } else {
-      const contract = new StellarSdk.Contract(this.marketContractId);
+      const contract = new StellarSdk.Contract(contractId);
       op = contract.call(
         'settle_market',
         new StellarSdk.Address(this.operatorPublicKey).toScVal(),
@@ -403,6 +433,11 @@ export class StellarService implements IStellarService {
       const msg = submitted.errorResult
         ? JSON.stringify(submitted.errorResult)
         : 'settle_market submission failed';
+      // Error(Contract, #6) = MarketAlreadySettled — idempotent, not a real error
+      if (this.isContractErrorCode({ message: msg }, 6)) {
+        console.log(`[settleMarketContract] Market ${marketId} already settled on-chain.`);
+        return;
+      }
       throw new Error(msg);
     }
     if (submitted.hash) {
@@ -456,5 +491,111 @@ export class StellarService implements IStellarService {
       throw new Error('Fee bump transaction not supported');
     }
     return tx.hash().toString('hex');
+  }
+
+  async getOraclePrice(asset: string): Promise<string | null> {
+    if (process.env.NODE_ENV === 'production') {
+      return this._getOraclePriceFromCoinGecko(asset);
+    }
+    return this._getOraclePriceFromReflector(asset);
+  }
+
+  /**
+   * Production: fetch real-time USD price from CoinGecko and convert to the
+   * same fixed-point integer representation used by Reflector (10^14 units).
+   */
+  private async _getOraclePriceFromCoinGecko(asset: string): Promise<string | null> {
+    const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
+      BTC:   'bitcoin',
+      ETH:   'ethereum',
+      SOL:   'solana',
+      XLM:   'stellar',
+      USDC:  'usd-coin',
+      USDT:  'tether',
+      BNB:   'binancecoin',
+      ADA:   'cardano',
+      DOT:   'polkadot',
+      AVAX:  'avalanche-2',
+      MATIC: 'matic-network',
+      LINK:  'chainlink',
+      UNI:   'uniswap',
+      ATOM:  'cosmos',
+      LTC:   'litecoin',
+      XRP:   'ripple',
+      DOGE:  'dogecoin',
+      SHIB:  'shiba-inu',
+    };
+
+    const coinId = SYMBOL_TO_COINGECKO_ID[asset.toUpperCase()];
+    if (!coinId) {
+      console.warn(`[getOraclePriceFromCoinGecko] No CoinGecko mapping for asset: ${asset}`);
+      return null;
+    }
+
+    try {
+      const apiKey = process.env.COINGECKO_API_KEY;
+      const baseUrl = apiKey
+        ? 'https://pro-api.coingecko.com/api/v3'
+        : 'https://api.coingecko.com/api/v3';
+      const headers: Record<string, string> = apiKey ? { 'x-cg-pro-api-key': apiKey } : {};
+
+      const url = `${baseUrl}/simple/price?ids=${coinId}&vs_currencies=usd`;
+      const response = await fetch(url, { headers });
+      if (!response.ok) throw new Error(`CoinGecko HTTP ${response.status}`);
+
+      const data = await response.json() as Record<string, { usd: number }>;
+      const usdPrice = data[coinId]?.usd;
+      if (usdPrice === undefined) return null;
+
+      // Convert to Reflector fixed-point: price_in_usd * 10^14
+      const fixedPoint = BigInt(Math.round(usdPrice * 1e14));
+      console.log(`[getOraclePriceFromCoinGecko] ${asset} = $${usdPrice} → ${fixedPoint}`);
+      return fixedPoint.toString();
+    } catch (e) {
+      console.error('[getOraclePriceFromCoinGecko] Failed:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Development: query the local Reflector mock contract via Soroban simulation.
+   */
+  private async _getOraclePriceFromReflector(asset: string): Promise<string | null> {
+    try {
+      const oracleMockId = process.env.ORACLE_MOCK_CONTRACT_ID || this.reflectorContractId;
+      if (!oracleMockId) {
+        throw new Error('Missing ORACLE_MOCK_CONTRACT_ID / REFLECTOR_CONTRACT_ID');
+      }
+      const contract = new StellarSdk.Contract(oracleMockId);
+      const assetArg = StellarSdk.xdr.ScVal.scvMap([
+        new StellarSdk.xdr.ScMapEntry({
+          key: StellarSdk.xdr.ScVal.scvSymbol('symbol'),
+          val: StellarSdk.nativeToScVal(asset, { type: 'symbol' }),
+        }),
+        new StellarSdk.xdr.ScMapEntry({
+          key: StellarSdk.xdr.ScVal.scvSymbol('type_code'),
+          val: StellarSdk.nativeToScVal('crypto', { type: 'symbol' }),
+        }),
+      ]);
+
+      const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
+      const tx = new StellarSdk.TransactionBuilder(source, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(contract.call('lastprice', assetArg))
+        .setTimeout(30)
+        .build();
+
+      const result = await this.sorobanServer.simulateTransaction(tx);
+      if (!StellarSdk.rpc.Api.isSimulationSuccess(result) || !result.result) return null;
+
+      const val = StellarSdk.scValToNative(result.result.retval);
+      if (!val || val.price === undefined) return null;
+      return String(val.price);
+    } catch (e) {
+      console.error('[getOraclePriceFromReflector] Failed:', e);
+      return null;
+    }
   }
 }

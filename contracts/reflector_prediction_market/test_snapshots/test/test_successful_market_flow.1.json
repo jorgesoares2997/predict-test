@@ -93,6 +93,31 @@
                 },
                 {
                   "u64": 300
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                },
+                {
+                  "u32": 14
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 50000000000000000
+                  }
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 55000000000000000
+                  }
+                },
+                {
+                  "vec": [
+                    {
+                      "symbol": "Greater"
+                    }
+                  ]
                 }
               ]
             }
@@ -713,10 +738,33 @@
                     },
                     {
                       "key": {
+                        "symbol": "condition_operator"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "symbol": "Greater"
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "end_time"
                       },
                       "val": {
                         "u64": 1300
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "initial_price"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 50000000000000000
+                        }
                       }
                     },
                     {
@@ -728,6 +776,22 @@
                           "hi": 0,
                           "lo": 50000000000000000
                         }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "oracle_contract"
+                      },
+                      "val": {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "oracle_decimals"
+                      },
+                      "val": {
+                        "u32": 14
                       }
                     },
                     {
@@ -770,6 +834,17 @@
                             "symbol": "Settled"
                           }
                         ]
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "target_price"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 55000000000000000
+                        }
                       }
                     },
                     {
