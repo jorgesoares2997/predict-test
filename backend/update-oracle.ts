@@ -14,12 +14,12 @@ async function updateOracle() {
   }
 
   const rpcServer = new StellarSdk.rpc.Server(sorobanRpc);
-  const source = await rpcServer.getAccount(operatorPublicKey);
   const contract = new StellarSdk.Contract(oracleMockId);
 
   const timestamp = Math.floor(Date.now() / 1000);
   
-  for (const asset of ['ETH', 'BTC']) {
+  for (const asset of ['BTC']) {
+    const source = await rpcServer.getAccount(operatorPublicKey);
     console.log(`Updating ${asset} price to current timestamp ${timestamp}...`);
     // price = 3000 * 10^14 for ETH, 60000 * 10^14 for BTC (dummy prices, just to pass)
     const price = asset === 'ETH' ? 300000000000000000n : 600000000000000000n;

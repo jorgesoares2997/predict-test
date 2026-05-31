@@ -7,9 +7,8 @@ const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || 'Test SDF Ne
 const stellar = new StellarService(horizonUrl, networkPassphrase);
 
 async function run() {
-  const marketId = 'beb7430d-dfc5-4742-bbb9-b21cd5c12815';
-  // we need the user's public key. Let's see if we can get it from the terminal log
-  const userPublicKey = 'GDTEKNITZO2OVH6MKR5O5JFFOXLSCHAESGZH5L5C74OCUGB6QJ5JTVBY';
+  const marketId = '5519f004-b4d2-46c6-b3cb-6cc8d4785f8c';
+  const userPublicKey = 'GDJGT72QVZYLWHKY7I52MNDGUID6CRW4DUPY7EPAZ2ENZBZEH3YT2XQO';
   
   console.log('Attempting to prepare claim for', userPublicKey);
   try {

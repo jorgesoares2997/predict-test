@@ -61,6 +61,27 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
   
   const isSettled = market.status === 'resolved' || (market.status as string) === 'settled';
 
+  const simOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'sim');
+  const naoOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'não' || o.name.toLowerCase() === 'nao');
+
+  let winningOutcomeId: string | undefined = undefined;
+  if (isSettled && market.finalPrice) {
+    const currentPrice = BigInt(market.finalPrice);
+    const targetP = market.targetPrice ? BigInt(market.targetPrice) : null;
+    const refP = targetP ?? (market.initialPrice ? BigInt(market.initialPrice) : null);
+    const op = market.conditionOperator ?? 'GREATER_THAN';
+    let conditionMet = false;
+    if (refP !== null) {
+      if (op === 'GREATER_THAN') conditionMet = currentPrice > refP;
+      else if (op === 'LESS_THAN') conditionMet = currentPrice < refP;
+      else if (op === 'EQUAL') conditionMet = currentPrice === refP;
+      else conditionMet = currentPrice > refP;
+    }
+    winningOutcomeId = conditionMet ? simOutcome?.id : naoOutcome?.id;
+  }
+
+  const isWinner = isSettled && existingPrediction && existingPrediction.result_id === winningOutcomeId;
+
   const handleTrade = async () => {
     if (!selectedOutcomeId) {
       toast.error('Selecione uma opção (Sim ou Não)');
@@ -96,10 +117,6 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
       </Card>
     );
   }
-
-  // Identifica Sim (1) e Não (-1) baseado no nome (assumindo que o Admin criou "Sim" e "Não")
-  const simOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'sim');
-  const naoOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'não' || o.name.toLowerCase() === 'nao');
 
   const selectedOutcomeData = market.outcomes.find(o => o.id === selectedOutcomeId);
   const averagePrice = selectedOutcomeData ? Number(selectedOutcomeData.price) : 0;
@@ -240,7 +257,7 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
           {isSettled ? (
             existingPrediction ? (
                <div className="space-y-3">
-                 <Button onClick={() => executeClaim({ marketId: market.id })} disabled={isClaiming || existingPrediction.tx_hash.startsWith('claim:')} className="w-full h-14 text-lg font-black uppercase tracking-widest bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20">
+                 <Button onClick={() => executeClaim({ marketId: market.id })} disabled={!isWinner || isClaiming || existingPrediction.tx_hash.startsWith('claim:')} className="w-full h-14 text-lg font-black uppercase tracking-widest bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20">
                    {existingPrediction.tx_hash.startsWith('claim:') ? 'Values Claimed' : isClaiming ? 'Processing...' : 'Claim Winnings / Refund'}
                  </Button>
                  <Button onClick={() => window.location.href = '/'} className="w-full h-14 text-lg font-black uppercase tracking-widest" variant="outline">
