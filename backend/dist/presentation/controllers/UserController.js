@@ -12,6 +12,8 @@ class UserController {
         return {
             id: user.id,
             publicKey: user.wallet_address,
+            name: user.name ?? null,
+            email: user.email ?? null,
             kycStatus: String(user.kyc_status || '').toLowerCase(),
             diditId: user.didit_id,
             createdAt: user.created_at,
@@ -19,9 +21,15 @@ class UserController {
     }
     createUser = async (request, reply) => {
         const data = dtos_1.CreateUserDto.parse(request.body);
-        const user = await this.userRepository.create({ wallet_address: data.wallet_address });
-        if (data.kyc_status || data.didit_id) {
+        const user = await this.userRepository.create({
+            wallet_address: data.wallet_address,
+            name: data.name ?? null,
+            email: data.email ?? null,
+        });
+        if (data.kyc_status || data.didit_id || data.name !== undefined || data.email !== undefined) {
             const updated = await this.userRepository.update(user.id, {
+                name: data.name,
+                email: data.email,
                 kyc_status: data.kyc_status,
                 didit_id: data.didit_id,
             });

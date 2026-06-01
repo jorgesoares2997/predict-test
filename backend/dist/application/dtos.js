@@ -12,10 +12,17 @@ exports.CreateMarketDto = zod_1.z.object({
     title: zod_1.z.string().min(5),
     description: zod_1.z.string().min(10),
     category_id: zod_1.z.string().uuid().optional(),
-    resolution_source: zod_1.z.string().url(),
-    closing_date: zod_1.z.string().datetime(),
-    liquidate_at: zod_1.z.string().datetime(),
+    status: zod_1.z.nativeEnum(client_1.MarketStatus).optional(),
+    contract_address: zod_1.z.string().nullable().optional(),
+    resolution_source: zod_1.z.string().url().nullable().optional(),
+    closing_date: zod_1.z.string(),
+    liquidate_at: zod_1.z.string(),
     results: zod_1.z.array(zod_1.z.string()).min(2),
+    oracle_asset: zod_1.z.string().nullable().optional(),
+    oracle_contract_address: zod_1.z.string().nullable().optional(),
+    oracle_decimals: zod_1.z.number().int().nullable().optional(),
+    target_price: zod_1.z.string().nullable().optional(),
+    condition_operator: zod_1.z.nativeEnum(client_1.ConditionOperator).nullable().optional(),
 });
 exports.RegisterTradeDto = zod_1.z.object({
     tx_hash: zod_1.z.string(),
@@ -30,11 +37,15 @@ exports.DiditWebhookDto = zod_1.z.object({
 });
 exports.CreateUserDto = zod_1.z.object({
     wallet_address: zod_1.z.string(),
+    name: zod_1.z.string().min(2).max(120).optional(),
+    email: zod_1.z.string().email().optional(),
     didit_id: zod_1.z.string().optional(),
     kyc_status: zod_1.z.nativeEnum(client_1.KycStatus).optional(),
 });
 exports.UpdateUserDto = zod_1.z.object({
     wallet_address: zod_1.z.string().optional(),
+    name: zod_1.z.string().min(2).max(120).nullable().optional(),
+    email: zod_1.z.string().email().nullable().optional(),
     didit_id: zod_1.z.string().nullable().optional(),
     kyc_status: zod_1.z.nativeEnum(client_1.KycStatus).optional(),
 });
@@ -45,8 +56,21 @@ exports.UpdateMarketDto = zod_1.z.object({
     category_id: zod_1.z.string().uuid().nullable().optional(),
     contract_address: zod_1.z.string().nullable().optional(),
     resolution_source: zod_1.z.string().url().optional(),
-    closing_date: zod_1.z.string().datetime().optional(),
-    liquidate_at: zod_1.z.string().datetime().optional(),
+    closing_date: zod_1.z.string().optional(),
+    liquidate_at: zod_1.z.string().optional(),
+    results: zod_1.z
+        .array(zod_1.z.object({
+        id: zod_1.z.string().uuid().optional(),
+        name: zod_1.z.string().min(1),
+    }))
+        .min(2)
+        .optional(),
+    oracle_asset: zod_1.z.string().nullable().optional(),
+    initial_price: zod_1.z.string().nullable().optional(),
+    oracle_contract_address: zod_1.z.string().nullable().optional(),
+    oracle_decimals: zod_1.z.number().int().nullable().optional(),
+    target_price: zod_1.z.string().nullable().optional(),
+    condition_operator: zod_1.z.nativeEnum(client_1.ConditionOperator).nullable().optional(),
 });
 exports.CreateResultDto = zod_1.z.object({
     name: zod_1.z.string().min(1),
@@ -74,5 +98,5 @@ exports.CreateCategoryDto = zod_1.z.object({
     name: zod_1.z.string().min(2),
 });
 exports.UpdateCategoryDto = zod_1.z.object({
-    name: zod_1.z.string().min(2).optional(),
+    name: zod_1.z.string().min(2),
 });

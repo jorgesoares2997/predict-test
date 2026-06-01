@@ -42,6 +42,7 @@ class CategoryUseCase {
         if (!existing) {
             throw new exceptions_1.NotFoundException('Category not found');
         }
+        await this.categoryRepository.detachMarkets(id);
         return this.categoryRepository.delete(id);
     }
 }

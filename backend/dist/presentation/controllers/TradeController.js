@@ -14,22 +14,62 @@ class TradeController {
         return reply.status(201).send(transaction);
     };
     prepareTrade = async (request, reply) => {
-        // Placeholder for Soroban transaction assembly.
-        // Frontend expects an XDR string from this endpoint.
+        const user = request.user;
         const { marketId, outcomeId, amount } = request.body;
         if (!marketId || !outcomeId || !amount) {
             return reply.status(400).send({ error: 'Missing required trade parameters' });
         }
-        return reply.status(501).send({
-            error: 'Trade preparation not implemented yet',
-            message: 'Implement Soroban XDR assembly in /api/trades/prepare',
+        const prepared = await this.tradeUseCase.prepareTrade({
+            userId: user.sub,
+            userPublicKey: user.wallet_address,
+            marketId,
+            outcomeId,
+            amount,
         });
+        return reply.status(200).send(prepared);
     };
-    executeTrade = async (_request, reply) => {
-        return reply.status(501).send({
-            error: 'Trade execution not implemented yet',
-            message: 'Implement Soroban submission + registration in /api/trades/execute',
+    executeTrade = async (request, reply) => {
+        const user = request.user;
+        const { signedXDR, transactionId, marketId, outcomeId, amount } = request.body;
+        if (!signedXDR || !transactionId || !marketId || !outcomeId || !amount) {
+            return reply.status(400).send({ error: 'Missing required execution parameters' });
+        }
+        const result = await this.tradeUseCase.executeTrade({
+            userId: user.sub,
+            userKycStatus: user.kyc_status,
+            signedXdr: signedXDR,
+            transactionId,
+            marketId,
+            outcomeId,
+            amount,
         });
+        return reply.status(200).send(result);
+    };
+    prepareClaim = async (request, reply) => {
+        const user = request.user;
+        const { marketId } = request.body;
+        if (!marketId) {
+            return reply.status(400).send({ error: 'Missing required claim parameters' });
+        }
+        const prepared = await this.tradeUseCase.prepareClaim({
+            userId: user.sub,
+            userPublicKey: user.wallet_address,
+            marketId,
+        });
+        return reply.status(200).send(prepared);
+    };
+    executeClaim = async (request, reply) => {
+        const user = request.user;
+        const { signedXDR, transactionId } = request.body;
+        if (!signedXDR || !transactionId) {
+            return reply.status(400).send({ error: 'Missing required claim execution parameters' });
+        }
+        const result = await this.tradeUseCase.executeClaim({
+            userId: user.sub,
+            signedXdr: signedXDR,
+            transactionId,
+        });
+        return reply.status(200).send(result);
     };
     createTransaction = async (request, reply) => {
         const data = dtos_1.CreateTransactionDto.parse(request.body);

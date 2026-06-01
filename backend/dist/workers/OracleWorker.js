@@ -11,14 +11,23 @@ class OracleWorker {
         this.oracleUseCase = oracleUseCase;
     }
     start() {
-        console.log('[OracleWorker] Starting cron job (running every 5 minutes)');
-        // Run every 5 minutes
-        node_cron_1.default.schedule('*/5 * * * *', async () => {
+        console.log('[OracleWorker] Starting cron job (every minute)');
+        // Every minute: close markets whose closing_date has passed (ACTIVE → LOCKED)
+        node_cron_1.default.schedule('* * * * *', async () => {
+            try {
+                await this.oracleUseCase.processClosings();
+            }
+            catch (error) {
+                console.error('[OracleWorker] Error during processClosings:', error);
+            }
+        });
+        // Every minute: resolve markets whose liquidate_at has passed (LOCKED → RESOLVED)
+        node_cron_1.default.schedule('* * * * *', async () => {
             try {
                 await this.oracleUseCase.processLiquidations();
             }
             catch (error) {
-                console.error('[OracleWorker] Error during execution:', error);
+                console.error('[OracleWorker] Error during processLiquidations:', error);
             }
         });
     }

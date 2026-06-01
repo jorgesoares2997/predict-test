@@ -13,6 +13,8 @@ class AuthController {
         return {
             id: user.id,
             publicKey: user.wallet_address,
+            name: user.name ?? null,
+            email: user.email ?? null,
             kycStatus: String(user.kyc_status || '').toLowerCase(),
         };
     }

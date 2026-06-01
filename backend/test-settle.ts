@@ -7,7 +7,7 @@ const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || 'Test SDF Ne
 const stellar = new StellarService(horizonUrl, networkPassphrase);
 
 async function run() {
-  const marketId = '5519f004-b4d2-46c6-b3cb-6cc8d4785f8c';
+  const marketId = '0ca5bf91-c00a-49a8-a55f-91117c81fa01';
   console.log('Attempting to settle market', marketId);
   try {
     await stellar.settleMarketContract(marketId, 0, 'BTC', process.env.MARKET_CONTRACT_ADDRESS || process.env.MARKET_CONTRACT_ID);

@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.setupRoutes = void 0;
 const auth_1 = require("./middleware/auth");
+const auth = { preHandler: [auth_1.authMiddleware] };
 const setupRoutes = (app, authController, webhookController, marketController, tradeController, userController, resultController, categoryController) => {
     // Legacy public routes
     app.post('/auth/login', authController.login);
@@ -21,31 +22,30 @@ const setupRoutes = (app, authController, webhookController, marketController, t
     app.get('/api/results/:id', resultController.getResult);
     app.get('/api/transactions', tradeController.listTransactions);
     app.get('/api/transactions/:id', tradeController.getTransaction);
-    // Protected Routes
-    app.register(async (protectedApp) => {
-        protectedApp.addHook('preHandler', auth_1.authMiddleware);
-        protectedApp.post('/markets', marketController.createMarket);
-        protectedApp.post('/trades', tradeController.registerTrade);
-        protectedApp.post('/api/markets', marketController.createMarket);
-        protectedApp.post('/api/trades', tradeController.registerTrade);
-        protectedApp.patch('/api/markets/:id', marketController.updateMarket);
-        protectedApp.delete('/api/markets/:id', marketController.deleteMarket);
-        protectedApp.post('/api/users', userController.createUser);
-        protectedApp.get('/api/users', userController.listUsers);
-        protectedApp.get('/api/users/:id', userController.getUser);
-        protectedApp.patch('/api/users/:id', userController.updateUser);
-        protectedApp.delete('/api/users/:id', userController.deleteUser);
-        protectedApp.post('/api/results', resultController.createResult);
-        protectedApp.patch('/api/results/:id', resultController.updateResult);
-        protectedApp.delete('/api/results/:id', resultController.deleteResult);
-        protectedApp.post('/api/transactions', tradeController.createTransaction);
-        protectedApp.patch('/api/transactions/:id', tradeController.updateTransaction);
-        protectedApp.delete('/api/transactions/:id', tradeController.deleteTransaction);
-        protectedApp.post('/api/trades/prepare', tradeController.prepareTrade);
-        protectedApp.post('/api/trades/execute', tradeController.executeTrade);
-        protectedApp.post('/api/categories', categoryController.createCategory);
-        protectedApp.patch('/api/categories/:id', categoryController.updateCategory);
-        protectedApp.delete('/api/categories/:id', categoryController.deleteCategory);
-    });
+    // Protected routes (JWT) — registered on the root app with preHandler so methods are always reachable
+    app.post('/markets', auth, marketController.createMarket);
+    app.post('/trades', auth, tradeController.registerTrade);
+    app.post('/api/markets', auth, marketController.createMarket);
+    app.patch('/api/markets/:id', auth, marketController.updateMarket);
+    app.delete('/api/markets/:id', auth, marketController.deleteMarket);
+    app.post('/api/markets/:id/migrate-token', auth, marketController.migrateMarketToken);
+    app.post('/api/users', auth, userController.createUser);
+    app.get('/api/users', auth, userController.listUsers);
+    app.get('/api/users/:id', auth, userController.getUser);
+    app.patch('/api/users/:id', auth, userController.updateUser);
+    app.delete('/api/users/:id', auth, userController.deleteUser);
+    app.post('/api/results', auth, resultController.createResult);
+    app.patch('/api/results/:id', auth, resultController.updateResult);
+    app.delete('/api/results/:id', auth, resultController.deleteResult);
+    app.post('/api/transactions', auth, tradeController.createTransaction);
+    app.patch('/api/transactions/:id', auth, tradeController.updateTransaction);
+    app.delete('/api/transactions/:id', auth, tradeController.deleteTransaction);
+    app.post('/api/trades/prepare', auth, tradeController.prepareTrade);
+    app.post('/api/trades/execute', auth, tradeController.executeTrade);
+    app.post('/api/trades/claim/prepare', auth, tradeController.prepareClaim);
+    app.post('/api/trades/claim/execute', auth, tradeController.executeClaim);
+    app.post('/api/categories', auth, categoryController.createCategory);
+    app.patch('/api/categories/:id', auth, categoryController.updateCategory);
+    app.delete('/api/categories/:id', auth, categoryController.deleteCategory);
 };
 exports.setupRoutes = setupRoutes;

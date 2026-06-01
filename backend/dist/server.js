@@ -39,8 +39,12 @@ const zod_1 = require("zod");
 dotenv_1.default.config({ path: path_1.default.resolve(__dirname, '../.env') });
 const server = (0, fastify_1.default)({ logger: true });
 async function start() {
+    // Default @fastify/cors methods are only GET,HEAD,POST — browsers block PATCH/DELETE cross-origin
+    // after preflight unless Allow-Methods includes them (you only saw OPTIONS in logs).
     await server.register(cors_1.default, {
-        origin: '*', // Adjust for production
+        origin: '*',
+        methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization'],
     });
     // Dependencies Initialization
     const pool = new pg_1.Pool({ connectionString: process.env.DATABASE_URL });
@@ -55,8 +59,8 @@ async function start() {
     const oracleService = new OracleService_1.OracleService();
     const authUseCase = new AuthUseCase_1.AuthUseCase(userRepository, stellarService, process.env.JWT_SECRET);
     const categoryUseCase = new CategoryUseCase_1.CategoryUseCase(categoryRepository);
-    const marketUseCase = new MarketUseCase_1.MarketUseCase(marketRepository);
-    const tradeUseCase = new TradeUseCase_1.TradeUseCase(transactionRepository, marketRepository, stellarService);
+    const marketUseCase = new MarketUseCase_1.MarketUseCase(marketRepository, stellarService);
+    const tradeUseCase = new TradeUseCase_1.TradeUseCase(transactionRepository, marketRepository, resultRepository, stellarService);
     const oracleUseCase = new OracleUseCase_1.OracleUseCase(marketRepository, oracleService, stellarService);
     const authController = new AuthController_1.AuthController(authUseCase);
     const webhookController = new WebhookController_1.WebhookController(userRepository);
@@ -70,7 +74,9 @@ async function start() {
     // Error handling
     server.setErrorHandler((error, request, reply) => {
         if (error instanceof zod_1.ZodError) {
-            return reply.status(400).send({ error: 'Validation Error', details: error.errors });
+            console.error('[Validation Error] Payload:', request.body);
+            console.error('[Validation Error] Details:', JSON.stringify(error.issues, null, 2));
+            return reply.status(400).send({ error: 'Validation Error', details: error.issues });
         }
         if (error instanceof exceptions_1.DomainException) {
             return reply.status(error.statusCode).send({ error: error.message });
