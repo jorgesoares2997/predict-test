@@ -145,6 +145,15 @@ export class MarketUseCase {
     return this.marketRepository.delete(id);
   }
 
+  async getOraclePrice(asset: string): Promise<{ raw: string | null; decimals: number }> {
+    const raw = await this.stellarService.getOraclePrice(asset);
+    let decimals = 7;
+    const symbol = asset.toUpperCase();
+    if (symbol === 'BTC') decimals = 6;
+    else if (symbol === 'ETH') decimals = 10;
+    return { raw, decimals };
+  }
+
   /** Migrate a market's token address on-chain (e.g. old test token → official USDC SAC). */
   async migrateMarketToken(marketId: string, newTokenAddress: string) {
     const existing = await this.marketRepository.findById(marketId);

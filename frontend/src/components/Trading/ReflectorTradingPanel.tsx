@@ -26,16 +26,12 @@ const CONDITION_LABEL: Record<string, string> = {
 
 async function fetchReflectorPrice(asset: string): Promise<number | null> {
   try {
-    const map: Record<string, string> = {
-      'BTC': 'bitcoin',
-      'ETH': 'ethereum',
-      'XLM': 'stellar',
-      'USDC': 'usd-coin'
-    };
-    const id = map[asset.toUpperCase()] || asset.toLowerCase();
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
+    const res = await fetch(`http://127.0.0.1:8080/api/oracle/price/${encodeURIComponent(asset)}`);
+    if (!res.ok) return null;
     const data = await res.json();
-    return data[id]?.usd || null;
+    if (!data.raw) return null;
+    const decimals = data.decimals ?? 7;
+    return Number(BigInt(data.raw)) / Math.pow(10, decimals);
   } catch (error) {
     console.error('[fetchReflectorPrice] Error:', error);
     return null;
@@ -196,7 +192,7 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
                 )}
                 {livePrice !== null && (
                   <div className="flex justify-between border-t border-border/50 pt-1 mt-1">
-                    <span className="text-muted-foreground">Preço atual (CoinGecko)</span>
+                    <span className="text-muted-foreground">Preço atual (Reflector)</span>
                     <span className="font-mono font-bold text-blue-500">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}

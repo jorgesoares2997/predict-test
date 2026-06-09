@@ -39,6 +39,7 @@ export const setupRoutes = (
   app.get('/api/results/:id', resultController.getResult);
   app.get('/api/transactions', tradeController.listTransactions);
   app.get('/api/transactions/:id', tradeController.getTransaction);
+  app.get('/api/oracle/price/:asset', marketController.getOraclePrice);
 
   // Protected routes (JWT) — registered on the root app with preHandler so methods are always reachable
   app.post('/markets', auth, marketController.createMarket);

@@ -74,6 +74,15 @@ export class MarketController {
     return reply.status(204).send();
   };
 
+  getOraclePrice = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { asset } = request.params as { asset: string };
+    if (!asset) {
+      return reply.status(400).send({ error: 'asset parameter is required' });
+    }
+    const result = await this.marketUseCase.getOraclePrice(asset);
+    return reply.status(200).send(result);
+  };
+
   migrateMarketToken = async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string };
     const { newTokenAddress } = request.body as { newTokenAddress: string };

@@ -59,16 +59,12 @@ const SIMULATION_SOURCE = 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCC
 
 async function fetchReflectorPrice(asset: string): Promise<number | null> {
   try {
-    const map: Record<string, string> = {
-      'BTC': 'bitcoin',
-      'ETH': 'ethereum',
-      'XLM': 'stellar',
-      'USDC': 'usd-coin'
-    };
-    const id = map[asset.toUpperCase()] || asset.toLowerCase();
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
+    const res = await fetch(`http://127.0.0.1:8080/api/oracle/price/${encodeURIComponent(asset)}`);
+    if (!res.ok) return null;
     const data = await res.json();
-    return data[id]?.usd || null;
+    if (!data.raw) return null;
+    const decimals = data.decimals ?? 7;
+    return Number(BigInt(data.raw)) / Math.pow(10, decimals);
   } catch (error) {
     console.error('[fetchReflectorPrice] Error:', error);
     return null;
@@ -123,7 +119,9 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
         : [{ name: 'Sim' }, { name: 'Não' }],
     marketType: initialData.oracleAsset ? 'oracle' : 'standard',
     oracleAsset: initialData.oracleAsset ?? '',
-    targetPrice: (initialData as any).targetPrice ?? '',
+    targetPrice: (initialData as any).targetPrice 
+      ? String(Number((initialData as any).targetPrice) / Math.pow(10, (initialData as any).oracleDecimals ?? 7))
+      : '',
     conditionOperator: (initialData as any).conditionOperator ?? 'GREATER_THAN',
     oracleDecimals: (initialData as any).oracleDecimals ?? 7,
   };
@@ -190,12 +188,18 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
 
   useEffect(() => {
     if (marketType === 'oracle' && oracleAsset && oracleAsset.length >= 2) {
+      const upperAsset = oracleAsset.toUpperCase();
+      let decimals = 7;
+      if (upperAsset === 'BTC') decimals = 6;
+      else if (upperAsset === 'ETH') decimals = 10;
+      setValue('oracleDecimals', decimals);
+
       const timer = setTimeout(() => fetchLivePrice(oracleAsset), 500);
       return () => clearTimeout(timer);
     } else {
       setLivePrice(null);
     }
-  }, [oracleAsset, marketType, fetchLivePrice]);
+  }, [oracleAsset, marketType, fetchLivePrice, setValue]);
 
   // Apply counter preset — closing = now + preset, liquidate = closing + 1 min
   const applyPreset = useCallback((minutes: number) => {

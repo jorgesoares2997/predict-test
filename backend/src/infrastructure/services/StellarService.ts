@@ -2,8 +2,10 @@ import { IStellarService } from '../../application/ports';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import nacl from 'tweetnacl';
 import { createHash } from 'crypto';
+import { Mutex } from './Mutex';
 
 export class StellarService implements IStellarService {
+  private operatorMutex = new Mutex();
   private getReflectorAssetScVal(assetSymbol: string): StellarSdk.xdr.ScVal {
     const symbol = assetSymbol.toUpperCase();
     
@@ -85,11 +87,16 @@ export class StellarService implements IStellarService {
     return text.includes(`Error(Contract, #${code})`);
   }
 
-  private async waitForRpcTransaction(hash: string, maxAttempts = 20, delayMs = 500): Promise<void> {
+  private async waitForRpcTransaction(hash: string, maxAttempts = 60, delayMs = 1000): Promise<void> {
+    console.log(`[waitForRpcTransaction] Polling for tx ${hash}...`);
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const tx = await this.sorobanServer.getTransaction(hash);
       const status = String((tx as any)?.status || '');
-      if (status === 'SUCCESS') return;
+      if (attempt % 5 === 0) console.log(`[waitForRpcTransaction] tx ${hash} attempt ${attempt + 1}: ${status}`);
+      if (status === 'SUCCESS') {
+        console.log(`[waitForRpcTransaction] tx ${hash} SUCCESS!`);
+        return;
+      }
       if (status === 'FAILED') {
         throw new Error(`Soroban transaction failed: ${JSON.stringify((tx as any)?.resultXdr || tx)}`);
       }
@@ -251,8 +258,10 @@ export class StellarService implements IStellarService {
       return;
     }
 
-    const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
-    let op: StellarSdk.xdr.Operation;
+    const unlock = await this.operatorMutex.lock();
+    try {
+      const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
+      let op: StellarSdk.xdr.Operation;
 
     if ((input as any).oracleAsset) {
       console.log(`[registerMarketContract] Creating Oracle market for asset: ${(input as any).oracleAsset}`);
@@ -324,6 +333,9 @@ export class StellarService implements IStellarService {
     }
     if (submitted.hash) {
       await this.waitForRpcTransaction(submitted.hash);
+    }
+    } finally {
+      unlock();
     }
   }
 
@@ -424,55 +436,60 @@ export class StellarService implements IStellarService {
       return;
     }
 
-    const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
-    let op: StellarSdk.xdr.Operation;
+    const unlock = await this.operatorMutex.lock();
+    try {
+      const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
+      let op: StellarSdk.xdr.Operation;
 
-    // Always use the contract address stored on the market (survives redeployments)
-    const contractId = contractAddress || this.marketContractId;
+      // Always use the contract address stored on the market (survives redeployments)
+      const contractId = contractAddress || this.marketContractId;
 
-    if (oracleAsset) {
-      // settle_market on our contract calls the Reflector oracle internally to get the price
-      console.log(`[settleMarketContract] Settling Oracle market: ${marketId} (Asset: ${oracleAsset}) on ${contractId}`);
-      const contract = new StellarSdk.Contract(contractId);
-      op = contract.call(
-        'settle_market',
-        StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId))
-      );
-    } else {
-      const contract = new StellarSdk.Contract(contractId);
-      op = contract.call(
-        'settle_market',
-        new StellarSdk.Address(this.operatorPublicKey).toScVal(),
-        StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
-        StellarSdk.nativeToScVal(winningOutcomeIndex, { type: 'u32' })
-      );
-    }
-
-    const tx = new StellarSdk.TransactionBuilder(source, {
-      fee: StellarSdk.BASE_FEE,
-      networkPassphrase: this.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(60)
-      .build();
-
-    const prepared = await this.sorobanServer.prepareTransaction(tx);
-    prepared.sign(StellarSdk.Keypair.fromSecret(this.operatorSecretKey));
-    
-    const submitted = await this.sorobanServer.sendTransaction(prepared);
-    if (submitted.status === 'ERROR') {
-      const msg = submitted.errorResult
-        ? JSON.stringify(submitted.errorResult)
-        : 'settle_market submission failed';
-      // Error(Contract, #6) = MarketAlreadySettled — idempotent, not a real error
-      if (this.isContractErrorCode({ message: msg }, 6)) {
-        console.log(`[settleMarketContract] Market ${marketId} already settled on-chain.`);
-        return;
+      if (oracleAsset) {
+        // settle_market on our contract calls the Reflector oracle internally to get the price
+        console.log(`[settleMarketContract] Settling Oracle market: ${marketId} (Asset: ${oracleAsset}) on ${contractId}`);
+        const contract = new StellarSdk.Contract(contractId);
+        op = contract.call(
+          'settle_market',
+          StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId))
+        );
+      } else {
+        const contract = new StellarSdk.Contract(contractId);
+        op = contract.call(
+          'settle_market',
+          new StellarSdk.Address(this.operatorPublicKey).toScVal(),
+          StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
+          StellarSdk.nativeToScVal(winningOutcomeIndex, { type: 'u32' })
+        );
       }
-      throw new Error(msg);
-    }
-    if (submitted.hash) {
-      await this.waitForRpcTransaction(submitted.hash);
+
+      const tx = new StellarSdk.TransactionBuilder(source, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(op)
+        .setTimeout(60)
+        .build();
+
+      const prepared = await this.sorobanServer.prepareTransaction(tx);
+      prepared.sign(StellarSdk.Keypair.fromSecret(this.operatorSecretKey));
+      
+      const submitted = await this.sorobanServer.sendTransaction(prepared);
+      if (submitted.status === 'ERROR') {
+        const msg = submitted.errorResult
+          ? JSON.stringify(submitted.errorResult)
+          : 'settle_market submission failed';
+        // Error(Contract, #6) = MarketAlreadySettled — idempotent, not a real error
+        if (this.isContractErrorCode({ message: msg }, 6)) {
+          console.log(`[settleMarketContract] Market ${marketId} already settled on-chain.`);
+          return;
+        }
+        throw new Error(msg);
+      }
+      if (submitted.hash) {
+        await this.waitForRpcTransaction(submitted.hash);
+      }
+    } finally {
+      unlock();
     }
   }
 
@@ -482,38 +499,43 @@ export class StellarService implements IStellarService {
       throw new Error('[migrateMarketToken] OPERATOR_PUBLIC_KEY / OPERATOR_SECRET_KEY not configured');
     }
 
-    const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
-    const contract = new StellarSdk.Contract(this.marketContractId);
+    const unlock = await this.operatorMutex.lock();
+    try {
+      const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
+      const contract = new StellarSdk.Contract(this.marketContractId);
 
-    const op = contract.call(
-      'migrate_market_token',
-      new StellarSdk.Address(this.operatorPublicKey).toScVal(),
-      StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
-      new StellarSdk.Address(newTokenAddress).toScVal()
-    );
+      const op = contract.call(
+        'migrate_market_token',
+        new StellarSdk.Address(this.operatorPublicKey).toScVal(),
+        StellarSdk.nativeToScVal(this.marketIdToBytes32(marketId)),
+        new StellarSdk.Address(newTokenAddress).toScVal()
+      );
 
-    const tx = new StellarSdk.TransactionBuilder(source, {
-      fee: StellarSdk.BASE_FEE,
-      networkPassphrase: this.networkPassphrase,
-    })
-      .addOperation(op)
-      .setTimeout(60)
-      .build();
+      const tx = new StellarSdk.TransactionBuilder(source, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(op)
+        .setTimeout(60)
+        .build();
 
-    const prepared = await this.sorobanServer.prepareTransaction(tx);
-    prepared.sign(StellarSdk.Keypair.fromSecret(this.operatorSecretKey));
+      const prepared = await this.sorobanServer.prepareTransaction(tx);
+      prepared.sign(StellarSdk.Keypair.fromSecret(this.operatorSecretKey));
 
-    const submitted = await this.sorobanServer.sendTransaction(prepared);
-    if (submitted.status === 'ERROR') {
-      const msg = submitted.errorResult
-        ? JSON.stringify(submitted.errorResult)
-        : 'migrate_market_token submission failed';
-      throw new Error(msg);
+      const submitted = await this.sorobanServer.sendTransaction(prepared);
+      if (submitted.status === 'ERROR') {
+        const msg = submitted.errorResult
+          ? JSON.stringify(submitted.errorResult)
+          : 'migrate_market_token submission failed';
+        throw new Error(msg);
+      }
+      if (submitted.hash) {
+        await this.waitForRpcTransaction(submitted.hash);
+      }
+      console.log(`[migrateMarketToken] Market ${marketId} token migrated to ${newTokenAddress}`);
+    } finally {
+      unlock();
     }
-    if (submitted.hash) {
-      await this.waitForRpcTransaction(submitted.hash);
-    }
-    console.log(`[migrateMarketToken] Market ${marketId} token migrated to ${newTokenAddress}`);
   }
 
   getTransactionHash(xdr: string): string {
