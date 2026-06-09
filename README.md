@@ -69,14 +69,17 @@ pnpm install
 # Copy environment template
 cp .env.example .env
 ```
-Update your `.env` with the deployed Contract IDs, your Admin Wallet Secret, and DB credentials.
+Update your `.env` with the deployed Contract IDs, your Admin Wallet Secret, and DB credentials. 
+We use **Supabase** for our PostgreSQL database.
 
 ```bash
-# Start the database via docker-compose (if available) or ensure local Postgres is running
-docker-compose up -d
+# Link your local CLI to your remote Supabase Project
+npx supabase login
+npx supabase link --project-ref <YOUR_PROJECT_REF>
 
-# Run Prisma migrations
-pnpm prisma migrate dev
+# Push the database schema to Supabase and seed initial categories
+npx prisma db push
+npx prisma db seed
 
 # Start the development server
 pnpm run dev
@@ -110,10 +113,10 @@ Visit `http://localhost:3000` to interact with Predict-IO.
 Predict-IO's crowning feature is its integration with the **Reflector Oracle**.
 
 **How it works:**
-1.  **Creation:** An Admin creates a market specifying an asset (e.g., "BTC"), a target price, and a condition (e.g., "> $65,000").
+1.  **Creation:** An Admin creates a market specifying an asset (e.g., "BTC", which is mapped to the exact stellar token address), a target price, and a condition (e.g., "> $65,000").
 2.  **Trading:** Users bet "Yes" or "No" by locking USDC directly into the smart contract.
 3.  **Liquidation:** When the deadline is reached, anyone (or the backend cron worker) can invoke the `settle_market` function on-chain.
 4.  **Trustless Judgment:** The contract *internally* calls the Reflector Oracle Contract's `lastprice(asset)` function to fetch the unadulterated, consensus-driven price of the asset.
 5.  **Payout / Refund:** The contract evaluates the condition. If a winner is determined, the pool is unlocked for proportional claiming. If there is an exact tie, the contract unlocks refunds, allowing users to withdraw their exact deposited amount.
 
-*Note on Environments: In Testnet, you may utilize a `ReflectorMock` contract for development purposes. In Production (Mainnet), the system queries the official Reflector Network directly, guaranteeing 100% decentralized data.*
+*Note on Environments: In Testnet, you may utilize a `ReflectorMock` contract using `Asset::Other(Symbol)`. In Production (Mainnet), the system queries the official Reflector Network directly using `Asset::Stellar(Address)`, guaranteeing 100% decentralized data.*
