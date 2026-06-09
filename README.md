@@ -1,381 +1,119 @@
-# prediction.io Contracts - Build, Deploy, Invoke Guide
+# Predict-IO 🔮
 
-This repository contains four Soroban smart contracts for a modular prediction market:
+Predict-IO is a truly trustless, decentralized Prediction Market platform built on the **Stellar Network (Soroban)**. It allows users to create, trade, and settle prediction markets seamlessly using standard API events or **On-chain Oracles (Reflector Network)**.
 
-- `token_share`: SEP-41 style token contract for YES/NO/LP shares.
-- `prediction_pool`: per-market AMM pool (`xy = k`) with oracle settlement.
-- `prediction_router`: user entrypoint with slippage guardrails.
-- `market_plane`: factory/registry to deploy and register new pools.
-
-This guide is a practical step-by-step runbook to:
-
-1. build Wasm artifacts,
-2. deploy contracts,
-3. wire RBAC/minter permissions,
-4. invoke core market flows.
+This repository is structured as a full-stack monorepo containing the Smart Contracts, a Fastify Backend, and a modern React Frontend.
 
 ---
 
-## 1) Prerequisites
+## ✨ Features
 
-Install:
+- **Dual Market Types:**
+  - **Standard Markets:** Sourced via custom API endpoints and resolved by the backend.
+  - **Oracle Markets (Reflector):** 100% Trustless and automated markets that fetch real-time cryptocurrency asset prices directly from the official Reflector Oracle Network on Stellar.
+- **Trustless Settlement:** Smart contracts ensure that payouts, refunds, and resolution logic are handled strictly on-chain without centralized interference.
+- **Micro-Fluctuation Handling:** Supports up to 14 decimal places of precision for granular asset price comparisons (e.g., BTC, ETH), eliminating false ties on minute timeframe markets.
+- **Refunds on Draws:** If a market ends in a perfect tie, the smart contract elegantly unlocks the pool and allows participants to safely claim a 100% refund of their original stakes.
+- **Clean Architecture:** Built using Domain-Driven Design (DDD), providing a resilient, testable, and highly scalable Node.js/Fastify backend API.
 
-- Rust (stable) and `wasm32-unknown-unknown` target
-- Soroban CLI (`soroban`)
-- A funded account on your target network (Testnet recommended for dev)
+---
+
+## 🏗 System Architecture
+
+The project consists of three main pillars:
+
+1.  **Frontend (`/frontend`)**
+    - Built with React, TailwindCSS, and shadcn/ui.
+    - Connects to user wallets via Stellar Freighter.
+    - Handles market exploration, bet placement, and winnings claiming directly on-chain.
+2.  **Backend (`/backend`)**
+    - Built with Fastify, Prisma ORM, and PostgreSQL.
+    - Acts as an indexer and gateway, caching on-chain market states to provide fast APIs for the frontend.
+    - Contains Cron workers to monitor market expirations and trigger liquidation calls.
+3.  **Smart Contracts (`/contracts`)**
+    - Written in Rust for Soroban.
+    - `prediction_market`: Manages standard custom API markets.
+    - `reflector_prediction_market`: Integrates directly with the Reflector SEP-40 interface to fetch target prices, compare conditions (Greater, Less, Equal), and automatically allocate the winning pool.
+
+---
+
+## 🚀 Step-by-Step Setup Guide
+
+### 1. Prerequisites
+Ensure you have the following installed on your local machine:
+- **Node.js** (v18+) & **pnpm**
+- **Rust** & `wasm32-unknown-unknown` target
+- **Soroban CLI** (`soroban`)
+- **Docker** (for running the PostgreSQL database locally)
+
+### 2. Smart Contracts Setup
+You need to compile and deploy the contracts to the Stellar Testnet.
 
 ```bash
+cd contracts
 rustup target add wasm32-unknown-unknown
-```
-
-Configure Soroban network alias (example: Testnet):
-
-```bash
-soroban config network add --global testnet \
-  --rpc-url https://soroban-testnet.stellar.org \
-  --network-passphrase "Test SDF Network ; September 2015"
-```
-
-Generate/import identities (examples):
-
-```bash
-soroban keys generate owner
-soroban keys generate ops
-soroban keys generate pauser
-soroban keys generate oracle
-soroban keys generate trader
-```
-
----
-
-## 2) Build all contracts
-
-From repo root:
-
-```bash
 cargo build --target wasm32-unknown-unknown --release
 ```
 
-Expected artifacts:
+Deploy the `prediction_market` and `reflector_prediction_market` WASMs using your Soroban CLI to Testnet and save the generated Contract IDs.
 
-- `target/wasm32-unknown-unknown/release/token_share.wasm`
-- `target/wasm32-unknown-unknown/release/prediction_pool.wasm`
-- `target/wasm32-unknown-unknown/release/prediction_router.wasm`
-- `target/wasm32-unknown-unknown/release/market_plane.wasm`
-
-Optional validation:
+### 3. Backend Setup
+The backend serves as the bridge between the database, the blockchain, and the frontend.
 
 ```bash
-cargo check
+cd backend
+
+# Install dependencies
+pnpm install
+
+# Copy environment template
+cp .env.example .env
 ```
+Update your `.env` with the deployed Contract IDs, your Admin Wallet Secret, and DB credentials.
+
+```bash
+# Start the database via docker-compose (if available) or ensure local Postgres is running
+docker-compose up -d
+
+# Run Prisma migrations
+pnpm prisma migrate dev
+
+# Start the development server
+pnpm run dev
+```
+
+### 4. Frontend Setup
+The frontend provides the UI for Admins to create markets and Users to place bets.
+
+```bash
+cd frontend
+
+# Install dependencies
+pnpm install
+
+# Copy environment template
+cp .env.example .env.local
+```
+Ensure your `.env.local` points to `NEXT_PUBLIC_API_URL=http://localhost:3333` and includes the correct Contract IDs.
+
+```bash
+# Start the development server
+pnpm run dev
+```
+
+Visit `http://localhost:3000` to interact with Predict-IO.
 
 ---
 
-## 3) Environment variables (recommended)
+## 🔮 Oracle Flow & Trustless Resolution
 
-Use this shell template to avoid repeating values:
+Predict-IO's crowning feature is its integration with the **Reflector Oracle**.
 
-```bash
-export NETWORK=testnet
-export OWNER=owner
-export OPS=ops
-export PAUSER=pauser
-export ORACLE=oracle
-export TRADER=trader
-```
+**How it works:**
+1.  **Creation:** An Admin creates a market specifying an asset (e.g., "BTC"), a target price, and a condition (e.g., "> $65,000").
+2.  **Trading:** Users bet "Yes" or "No" by locking USDC directly into the smart contract.
+3.  **Liquidation:** When the deadline is reached, anyone (or the backend cron worker) can invoke the `settle_market` function on-chain.
+4.  **Trustless Judgment:** The contract *internally* calls the Reflector Oracle Contract's `lastprice(asset)` function to fetch the unadulterated, consensus-driven price of the asset.
+5.  **Payout / Refund:** The contract evaluates the condition. If a winner is determined, the pool is unlocked for proportional claiming. If there is an exact tie, the contract unlocks refunds, allowing users to withdraw their exact deposited amount.
 
-Resolve addresses for identities:
-
-```bash
-export OWNER_ADDR="$(soroban keys address $OWNER)"
-export OPS_ADDR="$(soroban keys address $OPS)"
-export PAUSER_ADDR="$(soroban keys address $PAUSER)"
-export ORACLE_ADDR="$(soroban keys address $ORACLE)"
-export TRADER_ADDR="$(soroban keys address $TRADER)"
-```
-
----
-
-## 4) Deploy `token_share` contracts (YES, NO, LP)
-
-Deploy three instances of the same Wasm:
-
-```bash
-export TOKEN_WASM=target/wasm32-unknown-unknown/release/token_share.wasm
-
-export YES_TOKEN_ID="$(soroban contract deploy --network $NETWORK --source $OWNER --wasm $TOKEN_WASM)"
-export NO_TOKEN_ID="$(soroban contract deploy --network $NETWORK --source $OWNER --wasm $TOKEN_WASM)"
-export LP_TOKEN_ID="$(soroban contract deploy --network $NETWORK --source $OWNER --wasm $TOKEN_WASM)"
-```
-
-Initialize each token.
-
-Important: set a temporary minter first (owner). After pool deployment, rotate minter to the pool contract.
-
-```bash
-soroban contract invoke --id $YES_TOKEN_ID --network $NETWORK --source $OWNER -- \
-  initialize \
-  --owner "$OWNER_ADDR" \
-  --minter "$OWNER_ADDR" \
-  --name "Prediction YES" \
-  --symbol "pYES" \
-  --decimals 7
-
-soroban contract invoke --id $NO_TOKEN_ID --network $NETWORK --source $OWNER -- \
-  initialize \
-  --owner "$OWNER_ADDR" \
-  --minter "$OWNER_ADDR" \
-  --name "Prediction NO" \
-  --symbol "pNO" \
-  --decimals 7
-
-soroban contract invoke --id $LP_TOKEN_ID --network $NETWORK --source $OWNER -- \
-  initialize \
-  --owner "$OWNER_ADDR" \
-  --minter "$OWNER_ADDR" \
-  --name "Prediction LP" \
-  --symbol "pLP" \
-  --decimals 7
-```
-
----
-
-## 5) USDC token setup
-
-You need a SEP-41 compatible token contract representing USDC on your environment.
-
-- If using existing Testnet asset contract, set `USDC_TOKEN_ID` to that contract.
-- If local/dev, deploy another token contract and mint balances to test users.
-
-```bash
-export USDC_TOKEN_ID="<USDC_TOKEN_CONTRACT_ID>"
-```
-
----
-
-## 6) Deploy router and pool
-
-```bash
-export ROUTER_WASM=target/wasm32-unknown-unknown/release/prediction_router.wasm
-export POOL_WASM=target/wasm32-unknown-unknown/release/prediction_pool.wasm
-
-export ROUTER_ID="$(soroban contract deploy --network $NETWORK --source $OWNER --wasm $ROUTER_WASM)"
-export POOL_ID="$(soroban contract deploy --network $NETWORK --source $OWNER --wasm $POOL_WASM)"
-```
-
-Initialize router:
-
-```bash
-soroban contract invoke --id $ROUTER_ID --network $NETWORK --source $OWNER -- \
-  initialize \
-  --owner "$OWNER_ADDR" \
-  --ops_admin "$OPS_ADDR" \
-  --emergency_pauser "$PAUSER_ADDR"
-```
-
-Initialize pool:
-
-```bash
-soroban contract invoke --id $POOL_ID --network $NETWORK --source $OWNER -- \
-  initialize \
-  --owner "$OWNER_ADDR" \
-  --ops_admin "$OPS_ADDR" \
-  --emergency_pauser "$PAUSER_ADDR" \
-  --oracle "$ORACLE_ADDR" \
-  --usdc_token "$USDC_TOKEN_ID" \
-  --yes_token "$YES_TOKEN_ID" \
-  --no_token "$NO_TOKEN_ID" \
-  --lp_token "$LP_TOKEN_ID" \
-  --fee_bps 30
-```
-
----
-
-## 7) Rotate token minter to pool (critical)
-
-After pool exists, set minter of YES/NO/LP to `POOL_ID`:
-
-```bash
-soroban contract invoke --id $YES_TOKEN_ID --network $NETWORK --source $OWNER -- \
-  set_minter --owner "$OWNER_ADDR" --new_minter "$POOL_ID"
-
-soroban contract invoke --id $NO_TOKEN_ID --network $NETWORK --source $OWNER -- \
-  set_minter --owner "$OWNER_ADDR" --new_minter "$POOL_ID"
-
-soroban contract invoke --id $LP_TOKEN_ID --network $NETWORK --source $OWNER -- \
-  set_minter --owner "$OWNER_ADDR" --new_minter "$POOL_ID"
-```
-
-If this step is skipped, pool mint/burn flows fail.
-
----
-
-## 8) Optional: deploy and initialize `market_plane` factory
-
-Deploy:
-
-```bash
-export PLANE_WASM=target/wasm32-unknown-unknown/release/market_plane.wasm
-export PLANE_ID="$(soroban contract deploy --network $NETWORK --source $OWNER --wasm $PLANE_WASM)"
-```
-
-Get pool Wasm hash:
-
-```bash
-export POOL_WASM_HASH="$(soroban contract install --network $NETWORK --source $OWNER --wasm $POOL_WASM)"
-```
-
-Initialize factory:
-
-```bash
-soroban contract invoke --id $PLANE_ID --network $NETWORK --source $OWNER -- \
-  initialize \
-  --owner "$OWNER_ADDR" \
-  --pool_wasm_hash "$POOL_WASM_HASH"
-```
-
-Create market via factory (replace salt with 32-byte value):
-
-```bash
-export MARKET_SALT="0000000000000000000000000000000000000000000000000000000000000042"
-
-soroban contract invoke --id $PLANE_ID --network $NETWORK --source $OWNER -- \
-  create_market \
-  --owner "$OWNER_ADDR" \
-  --params "{\"salt\":\"$MARKET_SALT\",\"question\":\"Will event happen before deadline?\",\"pool_owner\":\"$OWNER_ADDR\",\"ops_admin\":\"$OPS_ADDR\",\"emergency_pauser\":\"$PAUSER_ADDR\",\"oracle\":\"$ORACLE_ADDR\",\"usdc_token\":\"$USDC_TOKEN_ID\",\"yes_token\":\"$YES_TOKEN_ID\",\"no_token\":\"$NO_TOKEN_ID\",\"lp_token\":\"$LP_TOKEN_ID\",\"fee_bps\":30}"
-```
-
-Query registry:
-
-```bash
-soroban contract invoke --id $PLANE_ID --network $NETWORK --source $OWNER -- market_count
-soroban contract invoke --id $PLANE_ID --network $NETWORK --source $OWNER -- get_market --market_id 1
-```
-
----
-
-## 9) Invoke core flows
-
-### 9.1 Add liquidity (through router)
-
-```bash
-soroban contract invoke --id $ROUTER_ID --network $NETWORK --source $OWNER -- \
-  add_liquidity \
-  --pool "$POOL_ID" \
-  --provider "$OWNER_ADDR" \
-  --usdc_in 100000000 \
-  --min_shares_out 99900000
-```
-
-### 9.2 Buy YES
-
-`side=1` means YES, `side=2` means NO.
-
-```bash
-soroban contract invoke --id $ROUTER_ID --network $NETWORK --source $TRADER -- \
-  buy_side \
-  --pool "$POOL_ID" \
-  --trader "$TRADER_ADDR" \
-  --side 1 \
-  --amount_in 1000000 \
-  --min_amount_out 900000
-```
-
-### 9.3 Sell YES for USDC
-
-```bash
-soroban contract invoke --id $ROUTER_ID --network $NETWORK --source $TRADER -- \
-  sell_side \
-  --pool "$POOL_ID" \
-  --trader "$TRADER_ADDR" \
-  --side 1 \
-  --max_amount_in 1500000 \
-  --desired_usdc_out 1000000 \
-  --min_usdc_out 990000
-```
-
-### 9.4 Oracle settlement
-
-Resolve winner:
-
-```bash
-soroban contract invoke --id $POOL_ID --network $NETWORK --source $ORACLE -- \
-  oracle_resolve --winner 1
-```
-
-### 9.5 Redeem winnings
-
-```bash
-soroban contract invoke --id $POOL_ID --network $NETWORK --source $TRADER -- \
-  redeem_winnings \
-  --user "$TRADER_ADDR" \
-  --amount_winner_in 500000
-```
-
----
-
-## 10) Admin operations (RBAC)
-
-Pause/unpause router:
-
-```bash
-soroban contract invoke --id $ROUTER_ID --network $NETWORK --source $PAUSER -- \
-  set_paused --paused true
-```
-
-Pause/unpause pool:
-
-```bash
-soroban contract invoke --id $POOL_ID --network $NETWORK --source $PAUSER -- \
-  set_paused --paused true
-```
-
-Update pool fee (`ops_admin` or `owner`):
-
-```bash
-soroban contract invoke --id $POOL_ID --network $NETWORK --source $OPS -- \
-  set_fee_bps --caller "$OPS_ADDR" --fee_bps 50
-```
-
-Heartbeat (owner-only TTL bump):
-
-```bash
-soroban contract invoke --id $POOL_ID --network $NETWORK --source $OWNER -- \
-  heartbeat --caller "$OWNER_ADDR"
-```
-
----
-
-## 11) Useful read calls
-
-```bash
-soroban contract invoke --id $POOL_ID --network $NETWORK --source $OWNER -- get_state
-soroban contract invoke --id $YES_TOKEN_ID --network $NETWORK --source $OWNER -- total_supply
-soroban contract invoke --id $YES_TOKEN_ID --network $NETWORK --source $OWNER -- balance --id "$TRADER_ADDR"
-```
-
----
-
-## 12) Troubleshooting checklist
-
-- `Unauthorized` on mint/burn:
-  - verify YES/NO/LP minter is set to `POOL_ID`.
-- `SlippageExceeded`:
-  - relax `min_amount_out`, `min_usdc_out`, or increase `max_amount_in`.
-- `NotInitialized`:
-  - verify `initialize` was called on all contracts.
-- `Account not found`:
-  - fund account on testnet friendbot.
-- Token transfer failures:
-  - ensure user has token balances and required auth.
-
----
-
-## 13) Current implementation notes
-
-- Contracts are intentionally educational and heavily commented.
-- `prediction_pool` contains oracle settlement and AMM swap logic with safety checks.
-- `prediction_router` enforces slippage parameters at the user entrypoint.
-- `market_plane` supports deterministic pool deployment (`salt`) and registry state.
-
-For production, add deeper invariant/fuzz testing, formalized upgrade policy, and indexer-backed observability before mainnet usage.
+*Note on Environments: In Testnet, you may utilize a `ReflectorMock` contract for development purposes. In Production (Mainnet), the system queries the official Reflector Network directly, guaranteeing 100% decentralized data.*

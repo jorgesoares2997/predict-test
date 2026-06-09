@@ -307,10 +307,20 @@ export class TradeUseCase {
       });
     } catch (error: any) {
       const msg = String(error?.message || error || '');
-      // Contract already settled but user has no position
-      if (msg.includes('Error(Contract, #12)')) throw new DomainException('You have no position in this market.');
-      if (msg.includes('Error(Contract, #11)')) throw new DomainException('You have already claimed your winnings.');
-      if (msg.includes('Error(Contract, #6)'))  throw new DomainException('Market is not settled on-chain yet. Try again in a moment.');
+      
+      const isOracle = !!market.oracle_asset;
+      
+      // Error code mapping differs between the two contracts
+      if (isOracle) {
+        if (msg.includes('Error(Contract, #12)')) throw new DomainException('You have no winning position to claim in this market.');
+        if (msg.includes('Error(Contract, #11)')) throw new DomainException('You have already claimed your winnings.');
+        if (msg.includes('Error(Contract, #5)'))  throw new DomainException('Market is not settled on-chain yet. Try again in a moment.');
+      } else {
+        if (msg.includes('Error(Contract, #13)')) throw new DomainException('You have no winning position to claim in this market.');
+        if (msg.includes('Error(Contract, #12)')) throw new DomainException('You have already claimed your winnings.');
+        if (msg.includes('Error(Contract, #11)')) throw new DomainException('Market is not settled on-chain yet. Try again in a moment.');
+      }
+      
       throw new DomainException(`Failed to prepare claim: ${msg}`);
     }
 

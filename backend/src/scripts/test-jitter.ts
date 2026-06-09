@@ -7,7 +7,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 async function main() {
   const server = new StellarSdk.rpc.Server(process.env.STELLAR_SOROBAN_RPC_URL || '', { allowHttp: true });
   const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || '';
-  const oracleContractId = process.env.ORACLE_MOCK_CONTRACT_ID || '';
+  const oracleContractId = process.env.REFLECTOR_CONTRACT_ID || '';
   const operatorSecret = process.env.OPERATOR_SECRET_KEY || '';
 
   const operatorKeypair = StellarSdk.Keypair.fromSecret(operatorSecret);

@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { Market } from '@/types';
+import * as StellarSdk from '@stellar/stellar-sdk';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -47,26 +48,44 @@ const COUNTER_PRESETS = [
   { label: '+1 day', minutes: 1440 },
 ];
 
-// CoinGecko symbol → coin ID map
-const COINGECKO_IDS: Record<string, string> = {
-  BTC:   'bitcoin',
-  ETH:   'ethereum',
-  SOL:   'solana',
-  XLM:   'stellar',
-  BNB:   'binancecoin',
-  ADA:   'cardano',
-  DOT:   'polkadot',
-  AVAX:  'avalanche-2',
-  MATIC: 'matic-network',
-  LINK:  'chainlink',
-  UNI:   'uniswap',
-  ATOM:  'cosmos',
-  LTC:   'litecoin',
-  XRP:   'ripple',
-  DOGE:  'dogecoin',
-  USDC:  'usd-coin',
-  USDT:  'tether',
-};
+const REFLECTOR_CONTRACT_ID =
+  process.env.NEXT_PUBLIC_REFLECTOR_CONTRACT_ID ||
+  'CBNBAFKPT54W4HYECFNLF5RLICUZPNK6LXHM6BKUECN3SWXFHQPB56Y';
+const REFLECTOR_RPC_URL =
+  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL || 'https://soroban-mainnet.stellar.org';
+const REFLECTOR_NETWORK_PASSPHRASE = 'Public Global Stellar Network ; September 2015';
+// Dummy source account for read-only Soroban simulation (no real funds needed)
+const SIMULATION_SOURCE = 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN';
+
+async function fetchReflectorPrice(asset: string): Promise<number | null> {
+  try {
+    const server = new StellarSdk.rpc.Server(REFLECTOR_RPC_URL);
+    const contract = new StellarSdk.Contract(REFLECTOR_CONTRACT_ID);
+    // SEP-40 Asset::Other(Symbol) for crypto assets
+    const assetArg = StellarSdk.xdr.ScVal.scvVec([
+      StellarSdk.xdr.ScVal.scvSymbol('Other'),
+      StellarSdk.nativeToScVal(asset.toUpperCase(), { type: 'symbol' }),
+    ]);
+    const source = new StellarSdk.Account(SIMULATION_SOURCE, '0');
+    const tx = new StellarSdk.TransactionBuilder(source, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: REFLECTOR_NETWORK_PASSPHRASE,
+    })
+      .addOperation(contract.call('lastprice', assetArg))
+      .setTimeout(30)
+      .build();
+
+    const result = await server.simulateTransaction(tx);
+    if (!StellarSdk.rpc.Api.isSimulationSuccess(result) || !result.result) return null;
+
+    const val = StellarSdk.scValToNative(result.result.retval);
+    if (!val || val.price === undefined) return null;
+    // Reflector prices are fixed-point with 14 decimal places → convert to USD float
+    return Number(BigInt(val.price)) / 1e14;
+  } catch {
+    return null;
+  }
+}
 
 function toDatetimeLocal(value?: string): string {
   if (!value) return '';
@@ -166,24 +185,16 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
     if (marketType === 'oracle') setValue('outcomes', [{ name: 'Sim' }, { name: 'Não' }]);
   }, [marketType, setValue]);
 
-  // Fetch live price when oracleAsset changes
+  // Fetch live price from Reflector mainnet when oracleAsset changes
   const fetchLivePrice = useCallback(async (asset: string) => {
-    const coinId = COINGECKO_IDS[asset.toUpperCase()];
-    if (!coinId) { setLivePrice(null); return; }
+    if (!asset || asset.length < 2) { setLivePrice(null); return; }
     setPriceFetching(true);
     try {
-      const res = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
-      );
-      const data = await res.json();
-      const price = data[coinId]?.usd ?? null;
+      const price = await fetchReflectorPrice(asset);
       setLivePrice(price);
-      // Auto-fill target price with current price if empty
       if (price !== null) {
         setValue('targetPrice', String(price));
       }
-    } catch {
-      setLivePrice(null);
     } finally {
       setPriceFetching(false);
     }
@@ -344,7 +355,7 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
         <div className="space-y-2">
           <Label>Category</Label>
           <input type="hidden" {...register('categoryId', { required: 'Category is required' })} />
-          <Select value={selectedCategoryId || undefined} onValueChange={(v) => setValue('categoryId', v ?? '')}>
+          <Select value={selectedCategoryId || ''} onValueChange={(v) => setValue('categoryId', v ?? '')}>
             <SelectTrigger className="w-full">
               <span className="truncate">
                 {selectedCategoryId

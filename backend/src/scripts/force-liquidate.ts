@@ -8,7 +8,7 @@ async function main() {
   const rpcServer = new StellarSdk.rpc.Server(process.env.STELLAR_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org', { allowHttp: true });
   const horizonServer = new StellarSdk.Horizon.Server(process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org');
   const networkPassphrase = process.env.STELLAR_NETWORK_PASSPHRASE || '';
-  const oracleContractId = process.env.ORACLE_MOCK_CONTRACT_ID || '';
+  const oracleContractId = process.env.REFLECTOR_CONTRACT_ID || '';
   const marketContractId = process.env.MARKET_CONTRACT_ADDRESS || '';
   const operatorSecret = process.env.OPERATOR_SECRET_KEY || '';
 

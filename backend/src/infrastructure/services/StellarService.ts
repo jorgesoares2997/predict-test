@@ -13,11 +13,19 @@ export class StellarService implements IStellarService {
   private operatorPublicKey: string;
   private operatorSecretKey: string;
 
+  private reflectorMainnetServer: StellarSdk.rpc.Server;
+  private reflectorNetworkPassphrase: string;
+
   constructor(horizonUrl: string, networkPassphrase: string) {
     this.server = new StellarSdk.Horizon.Server(horizonUrl);
     this.sorobanServer = new StellarSdk.rpc.Server(
       process.env.STELLAR_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org'
     );
+    this.reflectorMainnetServer = new StellarSdk.rpc.Server(
+      process.env.REFLECTOR_SOROBAN_RPC_URL || 'https://soroban-mainnet.stellar.org'
+    );
+    this.reflectorNetworkPassphrase =
+      process.env.REFLECTOR_NETWORK_PASSPHRASE || 'Public Global Stellar Network ; September 2015';
     this.networkPassphrase = networkPassphrase;
     this.marketContractId =
       process.env.MARKET_CONTRACT_ADDRESS ||
@@ -226,9 +234,9 @@ export class StellarService implements IStellarService {
     if ((input as any).oracleAsset) {
       console.log(`[registerMarketContract] Creating Oracle market for asset: ${(input as any).oracleAsset}`);
       const durationSeconds = Math.floor((input.liquidateAt.getTime() - Date.now()) / 1000);
-      const oracleMockId = (input as any).oracleContractAddress || process.env.ORACLE_MOCK_CONTRACT_ID || '';
+      const oracleMockId = (input as any).oracleContractAddress || this.reflectorContractId;
       if (!oracleMockId) {
-        throw new Error('Missing ORACLE_MOCK_CONTRACT_ID in environment variables');
+        throw new Error('Missing REFLECTOR_CONTRACT_ID in environment variables');
       }
       
       // Oracle market create_market is on our deployed market contract, not the Reflector oracle
@@ -494,104 +502,36 @@ export class StellarService implements IStellarService {
   }
 
   async getOraclePrice(asset: string): Promise<string | null> {
-    if (process.env.NODE_ENV === 'production') {
-      return this._getOraclePriceFromCoinGecko(asset);
-    }
     return this._getOraclePriceFromReflector(asset);
   }
 
-  /**
-   * Production: fetch real-time USD price from CoinGecko and convert to the
-   * same fixed-point integer representation used by Reflector (10^14 units).
-   */
-  private async _getOraclePriceFromCoinGecko(asset: string): Promise<string | null> {
-    const SYMBOL_TO_COINGECKO_ID: Record<string, string> = {
-      BTC:   'bitcoin',
-      ETH:   'ethereum',
-      SOL:   'solana',
-      XLM:   'stellar',
-      USDC:  'usd-coin',
-      USDT:  'tether',
-      BNB:   'binancecoin',
-      ADA:   'cardano',
-      DOT:   'polkadot',
-      AVAX:  'avalanche-2',
-      MATIC: 'matic-network',
-      LINK:  'chainlink',
-      UNI:   'uniswap',
-      ATOM:  'cosmos',
-      LTC:   'litecoin',
-      XRP:   'ripple',
-      DOGE:  'dogecoin',
-      SHIB:  'shiba-inu',
-    };
-
-    const coinId = SYMBOL_TO_COINGECKO_ID[asset.toUpperCase()];
-    if (!coinId) {
-      console.warn(`[getOraclePriceFromCoinGecko] No CoinGecko mapping for asset: ${asset}`);
-      return null;
-    }
-
-    try {
-      const apiKey = process.env.COINGECKO_API_KEY;
-      const baseUrl = apiKey
-        ? 'https://pro-api.coingecko.com/api/v3'
-        : 'https://api.coingecko.com/api/v3';
-      const headers: Record<string, string> = apiKey ? { 'x-cg-pro-api-key': apiKey } : {};
-
-      const url = `${baseUrl}/simple/price?ids=${coinId}&vs_currencies=usd`;
-      const response = await fetch(url, { headers });
-      if (!response.ok) throw new Error(`CoinGecko HTTP ${response.status}`);
-
-      const data = await response.json() as Record<string, { usd: number }>;
-      const usdPrice = data[coinId]?.usd;
-      if (usdPrice === undefined) return null;
-
-      // Convert to Reflector fixed-point: price_in_usd * 10^14
-      const fixedPoint = BigInt(Math.round(usdPrice * 1e14));
-      console.log(`[getOraclePriceFromCoinGecko] ${asset} = $${usdPrice} → ${fixedPoint}`);
-      return fixedPoint.toString();
-    } catch (e) {
-      console.error('[getOraclePriceFromCoinGecko] Failed:', e);
-      return null;
-    }
-  }
-
-  /**
-   * Development: query the local Reflector mock contract via Soroban simulation.
-   */
   private async _getOraclePriceFromReflector(asset: string): Promise<string | null> {
     try {
-      const oracleMockId = process.env.ORACLE_MOCK_CONTRACT_ID || this.reflectorContractId;
-      if (!oracleMockId) {
-        throw new Error('Missing ORACLE_MOCK_CONTRACT_ID / REFLECTOR_CONTRACT_ID');
+      if (!this.reflectorContractId) {
+        throw new Error('Missing REFLECTOR_CONTRACT_ID');
       }
-      const contract = new StellarSdk.Contract(oracleMockId);
-      const assetArg = StellarSdk.xdr.ScVal.scvMap([
-        new StellarSdk.xdr.ScMapEntry({
-          key: StellarSdk.xdr.ScVal.scvSymbol('symbol'),
-          val: StellarSdk.nativeToScVal(asset, { type: 'symbol' }),
-        }),
-        new StellarSdk.xdr.ScMapEntry({
-          key: StellarSdk.xdr.ScVal.scvSymbol('type_code'),
-          val: StellarSdk.nativeToScVal('crypto', { type: 'symbol' }),
-        }),
+      const contract = new StellarSdk.Contract(this.reflectorContractId);
+      // SEP-40 Asset enum: Asset::Other(Symbol) for crypto assets
+      const assetArg = StellarSdk.xdr.ScVal.scvVec([
+        StellarSdk.xdr.ScVal.scvSymbol('Other'),
+        StellarSdk.nativeToScVal(asset.toUpperCase(), { type: 'symbol' }),
       ]);
 
-      const source = await this.sorobanServer.getAccount(this.operatorPublicKey);
+      const source = new StellarSdk.Account(this.operatorPublicKey, '0');
       const tx = new StellarSdk.TransactionBuilder(source, {
         fee: StellarSdk.BASE_FEE,
-        networkPassphrase: this.networkPassphrase,
+        networkPassphrase: this.reflectorNetworkPassphrase,
       })
         .addOperation(contract.call('lastprice', assetArg))
         .setTimeout(30)
         .build();
 
-      const result = await this.sorobanServer.simulateTransaction(tx);
+      const result = await this.reflectorMainnetServer.simulateTransaction(tx);
       if (!StellarSdk.rpc.Api.isSimulationSuccess(result) || !result.result) return null;
 
       const val = StellarSdk.scValToNative(result.result.retval);
       if (!val || val.price === undefined) return null;
+      console.log(`[getOraclePriceFromReflector] ${asset} → ${val.price}`);
       return String(val.price);
     } catch (e) {
       console.error('[getOraclePriceFromReflector] Failed:', e);

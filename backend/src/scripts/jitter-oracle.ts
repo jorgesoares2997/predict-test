@@ -20,9 +20,9 @@ async function jitterOracle() {
   const operatorKeypair = StellarSdk.Keypair.fromSecret(operatorSecret);
   let sourceAccount = await server.getAccount(operatorKeypair.publicKey());
 
-  const oracleContractId = process.env.ORACLE_MOCK_CONTRACT_ID;
+  const oracleContractId = process.env.REFLECTOR_CONTRACT_ID;
   if (!oracleContractId) {
-    console.error('Missing ORACLE_MOCK_CONTRACT_ID in environment variables');
+    console.error('Missing REFLECTOR_CONTRACT_ID in environment variables');
     process.exit(1);
   }
   console.log(`Found Oracle Mock Address: ${oracleContractId}`);
