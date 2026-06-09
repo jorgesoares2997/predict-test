@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import * as StellarSdk from '@stellar/stellar-sdk';
 
-const SOROBAN_RPC_URL = 'https://soroban-testnet.stellar.org';
+const SOROBAN_RPC_URL = process.env.NEXT_PUBLIC_SOROBAN_RPC_URL || 'https://mainnet.sorobanrpc.com';
 const MARKET_CONTRACT_ID = process.env.NEXT_PUBLIC_MARKET_CONTRACT_ID || '';
 // Official Stellar Testnet USDC SAC (USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5)
 const USDC_CONTRACT_ID =
@@ -47,7 +47,7 @@ async function fetchContractUsdcBalance(): Promise<bigint> {
 
   const tx = new StellarSdk.TransactionBuilder(dummySource, {
     fee: StellarSdk.BASE_FEE,
-    networkPassphrase: 'Test SDF Network ; September 2015',
+    networkPassphrase: process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE || 'Public Global Stellar Network ; September 2015',
   })
     .addOperation(op)
     .setTimeout(10)
@@ -97,7 +97,7 @@ async function fetchMarketOnChainPool(marketId: string, contractAddress?: string
 
   const tx = new StellarSdk.TransactionBuilder(dummySource, {
     fee: StellarSdk.BASE_FEE,
-    networkPassphrase: 'Test SDF Network ; September 2015',
+    networkPassphrase: process.env.NEXT_PUBLIC_STELLAR_NETWORK_PASSPHRASE || 'Public Global Stellar Network ; September 2015',
   })
     .addOperation(op)
     .setTimeout(10)

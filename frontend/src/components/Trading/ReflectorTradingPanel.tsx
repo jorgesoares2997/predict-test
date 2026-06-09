@@ -24,7 +24,25 @@ const CONDITION_LABEL: Record<string, string> = {
   EQUAL: 'igual a (=)',
 };
 
-function formatOraclePrice(raw?: string, decimals = 14): string {
+async function fetchReflectorPrice(asset: string): Promise<number | null> {
+  try {
+    const map: Record<string, string> = {
+      'BTC': 'bitcoin',
+      'ETH': 'ethereum',
+      'XLM': 'stellar',
+      'USDC': 'usd-coin'
+    };
+    const id = map[asset.toUpperCase()] || asset.toLowerCase();
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
+    const data = await res.json();
+    return data[id]?.usd || null;
+  } catch (error) {
+    console.error('[fetchReflectorPrice] Error:', error);
+    return null;
+  }
+}
+
+function formatOraclePrice(raw?: string, decimals = 7): string {
   if (!raw) return '—';
   try {
     const usd = Number(BigInt(raw)) / Math.pow(10, decimals);
@@ -37,10 +55,26 @@ function formatOraclePrice(raw?: string, decimals = 14): string {
 export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPanelProps) {
   const [amount, setAmount] = useState<string>('');
   const [selectedOutcomeId, setSelectedOutcomeId] = useState<string | null>(null);
+  const [livePrice, setLivePrice] = useState<number | null>(null);
   
   const { executeTrade, isProcessing } = useExecuteTrade();
   const { executeClaim, isProcessing: isClaiming } = useClaimWinnings();
   const { user } = useAuthStore();
+
+  React.useEffect(() => {
+    if (market.oracleAsset && !['resolved', 'settled'].includes(market.status as string)) {
+      fetchReflectorPrice(market.oracleAsset).then(price => {
+        if (price !== null) setLivePrice(price);
+      });
+      // Poll every 10 seconds
+      const interval = setInterval(() => {
+        fetchReflectorPrice(market.oracleAsset!).then(price => {
+          if (price !== null) setLivePrice(price);
+        });
+      }, 10000);
+      return () => clearInterval(interval);
+    }
+  }, [market.oracleAsset, market.status]);
 
   const { data: userTransactions } = useQuery<TransactionRecord[]>({
     queryKey: ['user-market-transactions', user?.id, market.id],
@@ -158,6 +192,12 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
                       Preço alvo ({CONDITION_LABEL[market.conditionOperator]})
                     </span>
                     <span className="font-mono font-bold text-primary">{formatOraclePrice(market.targetPrice, market.oracleDecimals)}</span>
+                  </div>
+                )}
+                {livePrice !== null && (
+                  <div className="flex justify-between border-t border-border/50 pt-1 mt-1">
+                    <span className="text-muted-foreground">Preço atual (CoinGecko)</span>
+                    <span className="font-mono font-bold text-blue-500">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 {market.finalPrice && (

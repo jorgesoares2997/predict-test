@@ -59,30 +59,18 @@ const SIMULATION_SOURCE = 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCC
 
 async function fetchReflectorPrice(asset: string): Promise<number | null> {
   try {
-    const server = new StellarSdk.rpc.Server(REFLECTOR_RPC_URL);
-    const contract = new StellarSdk.Contract(REFLECTOR_CONTRACT_ID);
-    // SEP-40 Asset::Other(Symbol) for crypto assets
-    const assetArg = StellarSdk.xdr.ScVal.scvVec([
-      StellarSdk.xdr.ScVal.scvSymbol('Other'),
-      StellarSdk.nativeToScVal(asset.toUpperCase(), { type: 'symbol' }),
-    ]);
-    const source = new StellarSdk.Account(SIMULATION_SOURCE, '0');
-    const tx = new StellarSdk.TransactionBuilder(source, {
-      fee: StellarSdk.BASE_FEE,
-      networkPassphrase: REFLECTOR_NETWORK_PASSPHRASE,
-    })
-      .addOperation(contract.call('lastprice', assetArg))
-      .setTimeout(30)
-      .build();
-
-    const result = await server.simulateTransaction(tx);
-    if (!StellarSdk.rpc.Api.isSimulationSuccess(result) || !result.result) return null;
-
-    const val = StellarSdk.scValToNative(result.result.retval);
-    if (!val || val.price === undefined) return null;
-    // Reflector prices are fixed-point with 14 decimal places → convert to USD float
-    return Number(BigInt(val.price)) / 1e14;
-  } catch {
+    const map: Record<string, string> = {
+      'BTC': 'bitcoin',
+      'ETH': 'ethereum',
+      'XLM': 'stellar',
+      'USDC': 'usd-coin'
+    };
+    const id = map[asset.toUpperCase()] || asset.toLowerCase();
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`);
+    const data = await res.json();
+    return data[id]?.usd || null;
+  } catch (error) {
+    console.error('[fetchReflectorPrice] Error:', error);
     return null;
   }
 }
@@ -113,7 +101,7 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
       liquidateAt: addMinutes(now, 6),
       outcomes: [{ name: 'Sim' }, { name: 'Não' }],
       marketType: 'standard',
-      oracleDecimals: 14,
+      oracleDecimals: 7,
       targetPrice: '',
       conditionOperator: 'GREATER_THAN',
     };
@@ -137,7 +125,7 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
     oracleAsset: initialData.oracleAsset ?? '',
     targetPrice: (initialData as any).targetPrice ?? '',
     conditionOperator: (initialData as any).conditionOperator ?? 'GREATER_THAN',
-    oracleDecimals: (initialData as any).oracleDecimals ?? 14,
+    oracleDecimals: (initialData as any).oracleDecimals ?? 7,
   };
 }
 

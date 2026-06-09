@@ -18,7 +18,7 @@ pub enum ConditionOperator {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MarketData {
-    pub asset: Symbol,
+    pub asset: Asset,
     pub open_price: i128,
     pub initial_price: i128,
     pub target_price: i128,
@@ -53,9 +53,9 @@ pub enum DataKey {
 // SEP-40 compliant Asset and PriceData structures for Reflector Oracle
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Asset {
-    pub type_code: Symbol,
-    pub symbol: Symbol,
+pub enum Asset {
+    Stellar(Address),
+    Other(Symbol),
 }
 
 #[contracttype]

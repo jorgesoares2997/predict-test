@@ -4,6 +4,29 @@ import nacl from 'tweetnacl';
 import { createHash } from 'crypto';
 
 export class StellarService implements IStellarService {
+  private getReflectorAssetScVal(assetSymbol: string): StellarSdk.xdr.ScVal {
+    const symbol = assetSymbol.toUpperCase();
+    
+    // Hardcoded Reflector Mainnet Addresses for common crypto assets
+    const REFLECTOR_MAINNET_MAP: Record<string, string> = {
+      'BTC': 'CBHIQPUXLFLC5O44ZJVUTCL5LMZFLVGU5DEIGSYKBSAPFMOGTKOQEPFM', // BTC on Reflector
+      'ETH': 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA', // ETH on Reflector
+    };
+
+    if (REFLECTOR_MAINNET_MAP[symbol]) {
+      // Return Asset::Stellar(Address)
+      return StellarSdk.xdr.ScVal.scvVec([
+        StellarSdk.xdr.ScVal.scvSymbol('Stellar'),
+        new StellarSdk.Address(REFLECTOR_MAINNET_MAP[symbol]).toScVal()
+      ]);
+    }
+
+    // Fallback to Asset::Other(Symbol)
+    return StellarSdk.xdr.ScVal.scvVec([
+      StellarSdk.xdr.ScVal.scvSymbol('Other'),
+      StellarSdk.nativeToScVal(symbol, { type: 'symbol' })
+    ]);
+  }
   private server: StellarSdk.Horizon.Server;
   private sorobanServer: StellarSdk.rpc.Server;
   private networkPassphrase: string;
@@ -19,7 +42,7 @@ export class StellarService implements IStellarService {
   constructor(horizonUrl: string, networkPassphrase: string) {
     this.server = new StellarSdk.Horizon.Server(horizonUrl);
     this.sorobanServer = new StellarSdk.rpc.Server(
-      process.env.STELLAR_SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org'
+      process.env.SOROBAN_RPC_URL || 'https://mainnet.sorobanrpc.com'
     );
     this.reflectorMainnetServer = new StellarSdk.rpc.Server(
       process.env.REFLECTOR_SOROBAN_RPC_URL || 'https://soroban-mainnet.stellar.org'
@@ -257,10 +280,10 @@ export class StellarService implements IStellarService {
       op = marketContract.call(
         'create_market',
         StellarSdk.nativeToScVal(this.marketIdToBytes32(input.marketId)),
-        StellarSdk.nativeToScVal((input as any).oracleAsset, { type: 'symbol' }),
+        this.getReflectorAssetScVal((input as any).oracleAsset as string),
         StellarSdk.nativeToScVal(Math.max(durationSeconds, 60), { type: 'u64' }),
         new StellarSdk.Address(oracleMockId).toScVal(),
-        StellarSdk.nativeToScVal((input as any).oracleDecimals ?? 14, { type: 'u32' }),
+        StellarSdk.nativeToScVal((input as any).oracleDecimals ?? 7, { type: 'u32' }),
         StellarSdk.nativeToScVal(BigInt((input as any).initialPrice ?? '0'), { type: 'i128' }),
         StellarSdk.nativeToScVal(BigInt((input as any).targetPrice ?? '0'), { type: 'i128' }),
         conditionOperatorScVal
@@ -511,11 +534,8 @@ export class StellarService implements IStellarService {
         throw new Error('Missing REFLECTOR_CONTRACT_ID');
       }
       const contract = new StellarSdk.Contract(this.reflectorContractId);
-      // SEP-40 Asset enum: Asset::Other(Symbol) for crypto assets
-      const assetArg = StellarSdk.xdr.ScVal.scvVec([
-        StellarSdk.xdr.ScVal.scvSymbol('Other'),
-        StellarSdk.nativeToScVal(asset.toUpperCase(), { type: 'symbol' }),
-      ]);
+      // Use getReflectorAssetScVal to get the correct mapped Asset structure (Stellar or Other)
+      const assetArg = this.getReflectorAssetScVal(asset);
 
       const source = new StellarSdk.Account(this.operatorPublicKey, '0');
       const tx = new StellarSdk.TransactionBuilder(source, {

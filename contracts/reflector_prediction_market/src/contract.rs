@@ -34,7 +34,7 @@ impl ReflectorPredictionMarket {
     pub fn create_market(
         env: Env,
         market_id: BytesN<32>,
-        asset: Symbol,
+        asset: Asset,
         duration_seconds: u64,
         oracle_contract: Address,
         oracle_decimals: u32,
@@ -52,11 +52,8 @@ impl ReflectorPredictionMarket {
 
         // Consulta o preço atual no Oráculo Reflector (SEP-40)
         let oracle_client = OracleClient::new(&env, &oracle_contract);
-        let asset_struct = Asset {
-            type_code: Symbol::new(&env, "crypto"),
-            symbol: asset.clone(),
-        };
-        let current_price_data = oracle_client.lastprice(&asset_struct).ok_or(MarketError::OracleDataInvalid)?;
+        // Fetch initial price from oracle to validate asset and get starting point
+        let current_price_data = oracle_client.lastprice(&asset).ok_or(MarketError::OracleDataInvalid)?;
 
         let start_time = env.ledger().timestamp();
         let end_time = start_time + duration_seconds;
@@ -156,13 +153,9 @@ impl ReflectorPredictionMarket {
         // Historical price may be unavailable on testnet or for very recent timestamps,
         // so lastprice is used as a reliable fallback.
         let oracle_client = OracleClient::new(&env, &market.oracle_contract);
-        let asset_struct = Asset {
-            type_code: Symbol::new(&env, "crypto"),
-            symbol: market.asset.clone(),
-        };
         let close_price_data = oracle_client
-            .price(&asset_struct, &market.end_time)
-            .or_else(|| oracle_client.lastprice(&asset_struct))
+            .price(&market.asset, &market.end_time)
+            .or_else(|| oracle_client.lastprice(&market.asset))
             .ok_or(MarketError::OracleDataInvalid)?;
 
         // Staleness check: price must not be older than MAX_ORACLE_AGE_SECS from now
