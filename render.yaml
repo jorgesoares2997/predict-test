@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: predict-io-backend
+    env: node
+    rootDir: backend
+    # Comando de build modificado para instalar pnpm antes
+    buildCommand: npm install -g pnpm && pnpm install && pnpm build
+    startCommand: pnpm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # As variáveis com sync: false serão solicitadas no painel do Render
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: STELLAR_NETWORK_PASSPHRASE
+        sync: false
+      - key: STELLAR_HORIZON_URL
+        sync: false
+      - key: MARKET_CONTRACT_ID
+        sync: false
+      - key: REFLECTOR_CONTRACT_ID
+        sync: false
+      - key: OPERATOR_SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
