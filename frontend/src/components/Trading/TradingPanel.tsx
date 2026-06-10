@@ -132,15 +132,15 @@ export function TradingPanel({ market }: { market: Market }) {
           {!isSettled && amountNum > 0 && selectedOutcomeData && averagePrice > 0 && (
             <div className="bg-muted/30 p-3 rounded-md text-sm space-y-1 mt-4">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Preço médio</span>
+                <span className="text-muted-foreground">Average price</span>
                 <span>{(averagePrice * 100).toFixed(2)}¢</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Ações estimadas</span>
+                <span className="text-muted-foreground">Estimated shares</span>
                 <span>{shares.toFixed(2)}</span>
               </div>
               <div className="flex justify-between font-bold text-green-500 mt-2 border-t pt-2 border-border/50">
-                <span>Lucro Potencial</span>
+                <span>Potential Profit</span>
                 <span>+${expectedProfit.toFixed(2)}</span>
               </div>
             </div>
@@ -151,16 +151,16 @@ export function TradingPanel({ market }: { market: Market }) {
           existingPrediction ? (
             isWinner ? (
                <Button onClick={() => executeClaim({ marketId: market.id })} disabled={isClaiming || existingPrediction.tx_hash.startsWith('claim:')} className="w-full h-12 text-lg font-bold bg-green-600 hover:bg-green-700">
-                 {existingPrediction.tx_hash.startsWith('claim:') ? 'Valores Recebidos' : isClaiming ? 'Processando...' : 'Receber Valores'}
+                 {existingPrediction.tx_hash.startsWith('claim:') ? 'Values Claimed' : isClaiming ? 'Processing...' : 'Claim Winnings'}
                </Button>
             ) : (
                <Button onClick={() => window.location.href = '/'} className="w-full h-12 text-lg font-bold" variant="outline">
-                 Fazer outra predição
+                 Make another prediction
                </Button>
             )
           ) : (
              <Button disabled className="w-full h-12 text-lg font-bold">
-               Mercado Finalizado
+               Market Settled
              </Button>
           )
         ) : (

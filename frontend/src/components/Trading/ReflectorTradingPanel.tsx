@@ -19,9 +19,9 @@ interface ReflectorTradingPanelProps {
 }
 
 const CONDITION_LABEL: Record<string, string> = {
-  GREATER_THAN: 'maior que (>)',
-  LESS_THAN: 'menor que (<)',
-  EQUAL: 'igual a (=)',
+  GREATER_THAN: 'greater than (>)',
+  LESS_THAN: 'less than (<)',
+  EQUAL: 'equal to (=)',
 };
 
 async function fetchReflectorPrice(asset: string): Promise<number | null> {
@@ -91,8 +91,8 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
   
   const isSettled = market.status === 'resolved' || (market.status as string) === 'settled';
 
-  const simOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'sim');
-  const naoOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'não' || o.name.toLowerCase() === 'nao');
+  const simOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'yes');
+  const naoOutcome = market.outcomes.find(o => o.name.toLowerCase() === 'no');
 
   let winningOutcomeId: string | undefined = undefined;
   if (isSettled && market.finalPrice) {
@@ -114,11 +114,11 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
 
   const handleTrade = async () => {
     if (!selectedOutcomeId) {
-      toast.error('Selecione uma opção (Sim ou Não)');
+      toast.error('Please select an option (Yes or No)');
       return;
     }
     if (!amount || parseFloat(amount) <= 0) {
-      toast.error('Insira um valor válido');
+      toast.error('Please enter a valid amount');
       return;
     }
 
@@ -139,9 +139,9 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
       <Card className="bg-muted/30 border-dashed border-2">
         <CardContent className="flex flex-col items-center justify-center p-10 text-center">
           <Wallet className="h-12 w-12 text-primary/50 mb-4" />
-          <h3 className="text-xl font-bold">Conecte sua Wallet</h3>
+          <h3 className="text-xl font-bold">Connect your Wallet</h3>
           <p className="text-muted-foreground mt-2 max-w-xs text-sm">
-            Conecte sua Freighter para participar deste mercado de predição em tempo real.
+            Connect your Freighter wallet to participate in this prediction market in real time.
           </p>
         </CardContent>
       </Card>
@@ -161,10 +161,10 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-green-500 via-primary to-red-500" />
         <CardHeader>
           <CardTitle className="text-xl flex items-center gap-2">
-            Realizar Predição
+            Make a Prediction
           </CardTitle>
           <CardDescription>
-            O preço do ativo será maior que o preço de abertura?
+            Will the asset price be higher than the opening price?
           </CardDescription>
         </CardHeader>
         
@@ -173,40 +173,40 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
           {(market.initialPrice || market.targetPrice || market.finalPrice) && (
             <div className="bg-muted/50 rounded-lg p-3 space-y-2 border border-border/50 text-xs">
               <p className="font-semibold text-muted-foreground flex items-center gap-1 uppercase tracking-widest text-[10px]">
-                <Info className="h-3 w-3" /> Condição de Resolução
+                <Info className="h-3 w-3" /> Resolution Condition
               </p>
               <div className="space-y-1">
                 {market.initialPrice && (
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Preço inicial ({market.oracleAsset})</span>
+                    <span className="text-muted-foreground">Opening price ({market.oracleAsset})</span>
                     <span className="font-mono font-bold">{formatOraclePrice(market.initialPrice, market.oracleDecimals)}</span>
                   </div>
                 )}
                 {market.targetPrice && market.conditionOperator && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
-                      Preço alvo ({CONDITION_LABEL[market.conditionOperator]})
+                      Target price ({CONDITION_LABEL[market.conditionOperator]})
                     </span>
                     <span className="font-mono font-bold text-primary">{formatOraclePrice(market.targetPrice, market.oracleDecimals)}</span>
                   </div>
                 )}
                 {livePrice !== null && (
                   <div className="flex justify-between border-t border-border/50 pt-1 mt-1">
-                    <span className="text-muted-foreground">Preço atual (Reflector)</span>
+                    <span className="text-muted-foreground">Current price (Reflector)</span>
                     <span className="font-mono font-bold text-blue-500">${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                   </div>
                 )}
                 {market.finalPrice && (
                   <div className="flex justify-between border-t border-border/50 pt-1 mt-1">
-                    <span className="text-muted-foreground">Preço final (liquidação)</span>
+                    <span className="text-muted-foreground">Final price (settlement)</span>
                     <span className="font-mono font-bold text-green-500">{formatOraclePrice(market.finalPrice, market.oracleDecimals)}</span>
                   </div>
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground">
                 {market.conditionOperator && market.targetPrice
-                  ? `"Sim" vence se o preço for ${CONDITION_LABEL[market.conditionOperator]} ${formatOraclePrice(market.targetPrice, market.oracleDecimals)} na liquidação.`
-                  : 'Resolução via Oráculo Reflector (SEP-40).'}
+                  ? `"Yes" wins if the price is ${CONDITION_LABEL[market.conditionOperator]} ${formatOraclePrice(market.targetPrice, market.oracleDecimals)} at settlement.`
+                  : 'Resolved via Reflector Oracle (SEP-40).'}
               </p>
             </div>
           )}
@@ -223,7 +223,7 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
                   disabled={isSettled}
                 >
                   <TrendingUp className={`h-6 w-6 ${selectedOutcomeId === simOutcome.id ? 'text-white' : 'text-green-500'}`} />
-                  <span className="text-lg font-black tracking-tighter uppercase">Sim</span>
+                  <span className="text-lg font-black tracking-tighter uppercase">Yes</span>
                   <span className="text-xs font-bold opacity-90">{(Number(simOutcome.price) * 100).toFixed(2)}¢</span>
                 </Button>
               )}
@@ -238,7 +238,7 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
                   disabled={isSettled}
                 >
                   <TrendingDown className={`h-6 w-6 ${selectedOutcomeId === naoOutcome.id ? 'text-white' : 'text-red-500'}`} />
-                  <span className="text-lg font-black tracking-tighter uppercase">Não</span>
+                  <span className="text-lg font-black tracking-tighter uppercase">No</span>
                   <span className="text-xs font-bold opacity-90">{(Number(naoOutcome.price) * 100).toFixed(2)}¢</span>
                 </Button>
               )}
@@ -247,8 +247,8 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
 
           <div className="space-y-3">
             <div className="flex justify-between items-end">
-              <label className="text-xs font-semibold uppercase text-muted-foreground tracking-widest">Valor da Aposta</label>
-              <span className="text-[10px] text-muted-foreground">Saldo: 0.00 USDC</span>
+              <label className="text-xs font-semibold uppercase text-muted-foreground tracking-widest">Bet Amount</label>
+              <span className="text-[10px] text-muted-foreground">Balance: 0.00 USDC</span>
             </div>
             <div className="relative">
               <Input
@@ -275,15 +275,15 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
             {!isSettled && amountNum > 0 && selectedOutcomeData && averagePrice > 0 && (
               <div className="bg-muted/30 p-3 rounded-md text-sm space-y-1 mt-4 border border-border/50">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Preço médio</span>
+                  <span className="text-muted-foreground">Average price</span>
                   <span>{(averagePrice * 100).toFixed(2)}¢</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Ações estimadas</span>
+                  <span className="text-muted-foreground">Estimated shares</span>
                   <span>{shares.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-primary mt-2 border-t pt-2 border-border/50">
-                  <span>Lucro Potencial</span>
+                  <span>Potential Profit</span>
                   <span>+${expectedProfit.toFixed(2)}</span>
                 </div>
               </div>
@@ -311,12 +311,12 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
               disabled={Boolean(existingPrediction) || isProcessing || !amount || selectedOutcomeId === null}
               className="w-full h-14 text-lg font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
-              {existingPrediction ? 'Predição já realizada' : isProcessing ? 'Processando...' : 'Confirmar Predição'}
+              {existingPrediction ? 'Prediction already submitted' : isProcessing ? 'Processing...' : 'Confirm Prediction'}
             </Button>
           )}
 
           <p className="text-[9px] text-center text-muted-foreground leading-relaxed px-4">
-            Ao confirmar, você concorda com a liquidação via Oráculo Reflector (SEP-40) após 5 minutos.
+            By confirming, you agree to settlement via Reflector Oracle (SEP-40) after 5 minutes.
           </p>
         </CardContent>
       </Card>
@@ -324,15 +324,15 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
       {existingPrediction && (
         <Card className="mt-4 border-primary/30 bg-card/90">
           <CardHeader>
-            <CardTitle className="text-base">Sua predição neste mercado</CardTitle>
+            <CardTitle className="text-base">Your prediction for this market</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <div>
-              <p className="text-muted-foreground mb-1">Hash da Transação</p>
+              <p className="text-muted-foreground mb-1">Transaction Hash</p>
               <div className="flex items-start justify-between gap-2">
                 <p className="break-all line-clamp-2 font-mono text-xs">{existingPrediction.tx_hash}</p>
                 <div className="flex items-center gap-1">
-                  <Button type="button" size="icon" variant="ghost" onClick={async () => { await navigator.clipboard.writeText(existingPrediction.tx_hash); toast.success('Hash copiada'); }}>
+                  <Button type="button" size="icon" variant="ghost" onClick={async () => { await navigator.clipboard.writeText(existingPrediction.tx_hash); toast.success('Hash copied'); }}>
                     <Copy className="h-4 w-4" />
                   </Button>
                   <a href={`https://stellar.expert/explorer/testnet/tx/${existingPrediction.tx_hash}`} target="_blank" rel="noreferrer">
@@ -343,9 +343,9 @@ export function ReflectorTradingPanel({ market, openPrice }: ReflectorTradingPan
                 </div>
               </div>
             </div>
-            <p><span className="text-muted-foreground">Valor:</span> {existingPrediction.amount} USDC</p>
-            <p><span className="text-muted-foreground">Predição:</span> {selectedPredictionName}</p>
-            <p><span className="text-muted-foreground">Data:</span> {new Date(existingPrediction.created_at).toLocaleString()}</p>
+            <p><span className="text-muted-foreground">Amount:</span> {existingPrediction.amount} USDC</p>
+            <p><span className="text-muted-foreground">Prediction:</span> {selectedPredictionName}</p>
+            <p><span className="text-muted-foreground">Date:</span> {new Date(existingPrediction.created_at).toLocaleString()}</p>
           </CardContent>
         </Card>
       )}
