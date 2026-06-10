@@ -75,9 +75,7 @@ export class OracleUseCase {
           continue;
         }
 
-        if (market.contract_address) {
-          await this.stellarService.settleMarketContract(market.id, winningOutcomeIndex);
-        }
+        await this.stellarService.settleMarketContract(market.id, winningOutcomeIndex);
 
         await this.marketRepository.updateStatus(market.id, MarketStatus.RESOLVED);
         console.log(`[OracleUseCase] Market ${market.id} RESOLVED. Winner: ${winningResultName}`);
@@ -144,6 +142,10 @@ export class OracleUseCase {
     // --- Step 4: persist resolution in DB (always) ---
     try {
       await this.marketRepository.update(market.id, { final_price: rawPrice });
+      const contractAddress = process.env.MARKET_CONTRACT_ADDRESS || process.env.MARKET_CONTRACT_ID || null;
+      if (contractAddress && market.contract_address !== contractAddress) {
+        await this.marketRepository.update(market.id, { contract_address: contractAddress });
+      }
       await this.marketRepository.updateStatus(market.id, MarketStatus.RESOLVED);
       console.log(`[OracleUseCase] Oracle market ${market.id} RESOLVED in DB. Winner: outcome[${winningOutcomeIndex}] (${conditionMet ? 'Sim' : 'Não'})`);
     } catch (dbError) {

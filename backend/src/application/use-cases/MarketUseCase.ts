@@ -56,7 +56,7 @@ export class MarketUseCase {
         conditionOperator: market.condition_operator ?? null,
       });
 
-      const contractAddress = process.env.MARKET_CONTRACT_ADDRESS || null;
+      const contractAddress = process.env.MARKET_CONTRACT_ADDRESS || process.env.MARKET_CONTRACT_ID || null;
       if (contractAddress && market.contract_address !== contractAddress) {
         return this.marketRepository.update(market.id, { contract_address: contractAddress });
       }
