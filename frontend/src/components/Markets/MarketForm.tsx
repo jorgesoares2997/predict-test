@@ -95,7 +95,7 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
       contractAddress: '',
       closingDate: addMinutes(now, 5),
       liquidateAt: addMinutes(now, 6),
-      outcomes: [{ name: 'Sim' }, { name: 'Não' }],
+      outcomes: [{ name: 'Yes' }, { name: 'No' }],
       marketType: 'standard',
       oracleDecimals: 7,
       targetPrice: '',
@@ -116,7 +116,7 @@ function buildDefaultValues(initialData?: Market): MarketFormValues {
     outcomes:
       initialData.outcomes?.length > 0
         ? initialData.outcomes.map((o) => ({ id: o.id, name: o.name }))
-        : [{ name: 'Sim' }, { name: 'Não' }],
+        : [{ name: 'Yes' }, { name: 'No' }],
     marketType: initialData.oracleAsset ? 'oracle' : 'standard',
     oracleAsset: initialData.oracleAsset ?? '',
     targetPrice: (initialData as any).targetPrice 
@@ -166,9 +166,9 @@ export function MarketForm({ initialData, onSubmit, isLoading }: MarketFormProps
     if (cat?.name.toLowerCase() === 'cripto') setValue('marketType', 'oracle');
   }, [selectedCategoryId, categories, setValue]);
 
-  // Reset outcomes to Sim/Não in oracle mode
+  // Reset outcomes to Yes/No in oracle mode
   useEffect(() => {
-    if (marketType === 'oracle') setValue('outcomes', [{ name: 'Sim' }, { name: 'Não' }]);
+    if (marketType === 'oracle') setValue('outcomes', [{ name: 'Yes' }, { name: 'No' }]);
   }, [marketType, setValue]);
 
   // Fetch live price from Reflector mainnet when oracleAsset changes
