@@ -84,19 +84,13 @@ O mercado de previsões tradicional (Prediction Markets) muitas vezes sofre com 
 > *Screenshots da aplicação*
 
 ### Home Page
-![Home Page](public/screenshots/home-page.png)
+![Home Page](frontend/public/screenshots/home-page-predict-jorge.png)
 
-### Criação de Mercado (Market Creation)
-![Criação de Mercado](public/screenshots/market-creation.png)
+### Página de Admin (Dashboard)
+![Página de Admin](frontend/public/screenshots/admin-page-predict-jorge.png)
 
-### Exploração de Mercados
-![Exploração de Mercados](public/screenshots/market-exploration.png)
-
-### Realização de Aposta (Bet Placement)
-![Realização de Aposta](public/screenshots/bet-placement.png)
-
-### Resolução via Oráculo
-![Resolução via Oráculo](public/screenshots/oracle-resolution.png)
+### Formulário de Criação de Mercado
+![Formulário de Criação de Mercado](frontend/public/screenshots/predict-creator-form-jorge.png)
 
 ## 🔮 Próximos passos de melhoria
 - **Integração com Múltiplos Oráculos:** Expandir o suporte para outras redes de oráculos no ecossistema Stellar para abranger mercados não-cripto.
