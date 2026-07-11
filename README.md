@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/favicon.png" alt="Predict-IO Logo" width="120" />
+  <img src="frontend/src/app/icon.svg" alt="Predict-IO Logo" width="120" />
 </div>
 
 <h1 align="center">Predict-IO 🔮</h1>
