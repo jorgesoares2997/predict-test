@@ -1,122 +1,105 @@
-# Predict-IO 🔮
+<div align="center">
+  <img src="public/favicon.png" alt="Predict-IO Logo" width="120" />
+</div>
 
-Predict-IO is a truly trustless, decentralized Prediction Market platform built on the **Stellar Network (Soroban)**. It allows users to create, trade, and settle prediction markets seamlessly using standard API events or **On-chain Oracles (Reflector Network)**.
+<h1 align="center">Predict-IO 🔮</h1>
 
-This repository is structured as a full-stack monorepo containing the Smart Contracts, a Fastify Backend, and a modern React Frontend.
+## 🎯 O problema que o projeto resolve
+O mercado de previsões tradicional (Prediction Markets) muitas vezes sofre com falta de transparência, taxas altas e resoluções centralizadas sujeitas a manipulação. O **Predict-IO** resolve esse problema sendo uma plataforma verdadeiramente "trustless" e descentralizada, construída na rede **Stellar (Soroban)**. Ele permite a criação, negociação e liquidação de mercados de previsão de forma automatizada e segura, utilizando Oráculos On-chain (Reflector Network) para garantir que os resultados não sofram interferência centralizada, além de tratar micro-flutuações de preços com até 14 casas decimais de precisão.
 
----
+## 🛠 Tecnologias utilizadas
+- **Smart Contracts & Blockchain**: [Rust](https://www.rust-lang.org/), [Stellar Network (Soroban)](https://stellar.org/soroban) e [Reflector Oracle Network](https://reflector.network/).
+- **Frontend & UI**: [React](https://react.dev/), [Tailwind CSS](https://tailwindcss.com/) e [shadcn/ui](https://ui.shadcn.com/). Integração com a carteira Stellar Freighter.
+- **Backend & API**: [Node.js](https://nodejs.org/), [Fastify](https://fastify.dev/) e [Prisma ORM](https://www.prisma.io/).
+- **Banco de Dados**: [PostgreSQL](https://www.postgresql.org/) (hospedado no [Supabase](https://supabase.com/)).
+- **Linguagem**: [TypeScript](https://www.typescriptlang.org/) (Frontend e Backend) e [Rust](https://www.rust-lang.org/) (Contratos Inteligentes).
 
-## ✨ Features
+## 🚀 Como rodar ou acessar o projeto
 
-- **Dual Market Types:**
-  - **Standard Markets:** Sourced via custom API endpoints and resolved by the backend.
-  - **Oracle Markets (Reflector):** 100% Trustless and automated markets that fetch real-time cryptocurrency asset prices directly from the official Reflector Oracle Network on Stellar.
-- **Trustless Settlement:** Smart contracts ensure that payouts, refunds, and resolution logic are handled strictly on-chain without centralized interference.
-- **Micro-Fluctuation Handling:** Supports up to 14 decimal places of precision for granular asset price comparisons (e.g., BTC, ETH), eliminating false ties on minute timeframe markets.
-- **Refunds on Draws:** If a market ends in a perfect tie, the smart contract elegantly unlocks the pool and allows participants to safely claim a 100% refund of their original stakes.
-- **Clean Architecture:** Built using Domain-Driven Design (DDD), providing a resilient, testable, and highly scalable Node.js/Fastify backend API.
+### Pré-requisitos
+- Node.js (v18 ou superior) & pnpm
+- Rust & target `wasm32-unknown-unknown`
+- Soroban CLI (`soroban`)
+- Docker (para rodar o PostgreSQL localmente, se necessário)
 
----
+### Instalação e Execução local
 
-## 🏗 System Architecture
+1. **Clone o repositório:**
+   ```bash
+   git clone https://github.com/jorgesoares2997/predict_io
+   cd predict_io
+   ```
 
-The project consists of three main pillars:
+2. **Setup dos Smart Contracts:**
+   Compile e faça o deploy dos contratos para a Stellar Testnet.
+   ```bash
+   cd contracts
+   rustup target add wasm32-unknown-unknown
+   cargo build --target wasm32-unknown-unknown --release
+   ```
+   *Faça o deploy do `prediction_market` e `reflector_prediction_market` usando sua CLI do Soroban.*
 
-1.  **Frontend (`/frontend`)**
-    - Built with React, TailwindCSS, and shadcn/ui.
-    - Connects to user wallets via Stellar Freighter.
-    - Handles market exploration, bet placement, and winnings claiming directly on-chain.
-2.  **Backend (`/backend`)**
-    - Built with Fastify, Prisma ORM, and PostgreSQL.
-    - Acts as an indexer and gateway, caching on-chain market states to provide fast APIs for the frontend.
-    - Contains Cron workers to monitor market expirations and trigger liquidation calls.
-3.  **Smart Contracts (`/contracts`)**
-    - Written in Rust for Soroban.
-    - `prediction_market`: Manages standard custom API markets.
-    - `reflector_prediction_market`: Integrates directly with the Reflector SEP-40 interface to fetch target prices, compare conditions (Greater, Less, Equal), and automatically allocate the winning pool.
+3. **Setup do Backend:**
+   ```bash
+   cd backend
+   pnpm install
+   cp .env.example .env
+   
+   # Conecte ao seu projeto Supabase e aplique o schema
+   npx supabase login
+   npx supabase link --project-ref <YOUR_PROJECT_REF>
+   npx prisma db push
+   npx prisma db seed
+   
+   pnpm run dev
+   ```
 
----
+4. **Setup do Frontend:**
+   ```bash
+   cd frontend
+   pnpm install
+   cp .env.example .env.local
+   
+   # Inicie o servidor frontend
+   pnpm run dev
+   ```
+   Acesse no navegador padrão: `http://localhost:3000`.
 
-## 🚀 Step-by-Step Setup Guide
+## ✨ Principais funcionalidades
+- **Dual Market Types:** Mercados Padrão (resolvidos via API pelo backend) e Mercados Oracle (100% trustless, baseados no Reflector Network).
+- **Resolução Trustless (Oracle Flow):** A liquidação dos mercados é feita internamente pelo contrato inteligente consultando o oráculo on-chain, sem interferência humana.
+- **Tratamento de Micro-Flutuações:** Suporte a até 14 casas decimais para comparações granulares de preços de ativos (ex: BTC, ETH), eliminando empates falsos.
+- **Reembolso em Empates (Refunds on Draws):** Se um mercado terminar em empate perfeito, o contrato destrava a pool para que os participantes retirem 100% de seus valores apostados.
+- **Workers e Indexadores:** O backend possui rotinas Cron para monitorar a expiração de mercados e triggar chamadas de liquidação na blockchain automaticamente.
 
-### 1. Prerequisites
-Ensure you have the following installed on your local machine:
-- **Node.js** (v18+) & **pnpm**
-- **Rust** & `wasm32-unknown-unknown` target
-- **Soroban CLI** (`soroban`)
-- **Docker** (for running the PostgreSQL database locally)
+## 🧠 Decisões técnicas tomadas
+- **Arquitetura Limpa (DDD):** O backend foi construído usando Domain-Driven Design (DDD), garantindo uma API escalável, altamente testável e resiliente, funcionando como um indexador do estado on-chain.
+- **Descentralização Real com Reflector:** Em produção, o sistema consulta a rede oficial do Reflector (`Asset::Stellar(Address)`) para pegar o preço de consenso de ativos, garantindo dados 100% descentralizados.
+- **Separação de Responsabilidades:** O frontend lida apenas com a exploração de mercados e transações (assinatura com Freighter), enquanto o backend atua como gateway rápido via cache, e a blockchain mantém toda a lógica e os fundos sob custódia de contratos imutáveis.
 
-### 2. Smart Contracts Setup
-You need to compile and deploy the contracts to the Stellar Testnet.
+## 📸 Prints, vídeo, deploy ou exemplos de uso
+- **Deploy:** [https://predi-ct-io.vercel.app/](https://predi-ct-io.vercel.app/)
+- **Repositório:** [https://github.com/jorgesoares2997/predict_io](https://github.com/jorgesoares2997/predict_io)
 
-```bash
-cd contracts
-rustup target add wasm32-unknown-unknown
-cargo build --target wasm32-unknown-unknown --release
-```
+> *Screenshots da aplicação*
 
-Deploy the `prediction_market` and `reflector_prediction_market` WASMs using your Soroban CLI to Testnet and save the generated Contract IDs.
+### Home Page
+![Home Page](public/screenshots/home-page.png)
 
-### 3. Backend Setup
-The backend serves as the bridge between the database, the blockchain, and the frontend.
+### Criação de Mercado (Market Creation)
+![Criação de Mercado](public/screenshots/market-creation.png)
 
-```bash
-cd backend
+### Exploração de Mercados
+![Exploração de Mercados](public/screenshots/market-exploration.png)
 
-# Install dependencies
-pnpm install
+### Realização de Aposta (Bet Placement)
+![Realização de Aposta](public/screenshots/bet-placement.png)
 
-# Copy environment template
-cp .env.example .env
-```
-Update your `.env` with the deployed Contract IDs, your Admin Wallet Secret, and DB credentials. 
-We use **Supabase** for our PostgreSQL database.
+### Resolução via Oráculo
+![Resolução via Oráculo](public/screenshots/oracle-resolution.png)
 
-```bash
-# Link your local CLI to your remote Supabase Project
-npx supabase login
-npx supabase link --project-ref <YOUR_PROJECT_REF>
-
-# Push the database schema to Supabase and seed initial categories
-npx prisma db push
-npx prisma db seed
-
-# Start the development server
-pnpm run dev
-```
-
-### 4. Frontend Setup
-The frontend provides the UI for Admins to create markets and Users to place bets.
-
-```bash
-cd frontend
-
-# Install dependencies
-pnpm install
-
-# Copy environment template
-cp .env.example .env.local
-```
-Ensure your `.env.local` points to `NEXT_PUBLIC_API_URL=http://localhost:3333` and includes the correct Contract IDs.
-
-```bash
-# Start the development server
-pnpm run dev
-```
-
-Visit `http://localhost:3000` to interact with Predict-IO.
-
----
-
-## 🔮 Oracle Flow & Trustless Resolution
-
-Predict-IO's crowning feature is its integration with the **Reflector Oracle**.
-
-**How it works:**
-1.  **Creation:** An Admin creates a market specifying an asset (e.g., "BTC", which is mapped to the exact stellar token address), a target price, and a condition (e.g., "> $65,000").
-2.  **Trading:** Users bet "Yes" or "No" by locking USDC directly into the smart contract.
-3.  **Liquidation:** When the deadline is reached, anyone (or the backend cron worker) can invoke the `settle_market` function on-chain.
-4.  **Trustless Judgment:** The contract *internally* calls the Reflector Oracle Contract's `lastprice(asset)` function to fetch the unadulterated, consensus-driven price of the asset.
-5.  **Payout / Refund:** The contract evaluates the condition. If a winner is determined, the pool is unlocked for proportional claiming. If there is an exact tie, the contract unlocks refunds, allowing users to withdraw their exact deposited amount.
-
-*Note on Environments: In Testnet, you may utilize a `ReflectorMock` contract using `Asset::Other(Symbol)`. In Production (Mainnet), the system queries the official Reflector Network directly using `Asset::Stellar(Address)`, guaranteeing 100% decentralized data.*
+## 🔮 Próximos passos de melhoria
+- **Integração com Múltiplos Oráculos:** Expandir o suporte para outras redes de oráculos no ecossistema Stellar para abranger mercados não-cripto.
+- **Painel Analítico de Usuário:** Desenvolver um dashboard avançado para os usuários rastrearem seu histórico de apostas, PnL (Lucros e Perdas) e estatísticas.
+- **Mecanismo de Provisão de Liquidez:** Criar incentivos para provedores de liquidez iniciarem mercados com mais capital, reduzindo o slippage para apostadores.
+- **Governança Descentralizada (DAO):** Implementar tokens de governança para que a comunidade decida as taxas da plataforma e novos tipos de mercados.

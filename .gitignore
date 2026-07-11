@@ -3,3 +3,4 @@ node_modules/
 target/
 .env
 .vercel
+README_example.md
